@@ -1,0 +1,103 @@
+/*
+ * Copyright (C) 2019 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef ANDROID_HARDWARE_TV_TUNER_V1_0_FRONTEND_DEVICE_H_
+#define ANDROID_HARDWARE_TV_TUNER_V1_0_FRONTEND_DEVICE_H_
+
+#include <android/hardware/tv/tuner/1.0/ITuner.h>
+
+#define CONFIG_AMLOGIC_DVB_COMPAT
+#include "linux/dvb/frontend.h"
+
+using namespace std;
+
+namespace android {
+namespace hardware {
+namespace tv {
+namespace tuner {
+namespace V1_0 {
+namespace implementation {
+
+class Frontend;
+
+class FrontendDevice : public Thread {
+public:
+    FrontendDevice(uint32_t hwId, FrontendType type, Frontend* context);
+    virtual ~FrontendDevice();
+    virtual void release();
+    bool checkOpen(bool autoOpen);
+    virtual void stop();
+    virtual int  tune(const FrontendSettings& settings);
+    virtual int  scan(const FrontendSettings& settings, FrontendScanType type);
+    uint16_t getFeSnr();
+    uint32_t getFeBer();
+    uint16_t getSingnalStrenth();
+    virtual FrontendModulationStatus getFeModulationStatus();
+    virtual int  stopTune();
+    virtual int  stopScan();
+
+    virtual int getFrontendSettings(FrontendSettings *settings, void* fe_params) {return -1;};
+    virtual int getFeDeliverySystem(FrontendType type) {return SYS_UNDEFINED;};
+
+    typedef struct {
+        uint32_t          id;
+        int               devFd;
+        int               deliverySys;
+        FrontendType      type;
+        FrontendSettings* feSettings;
+        uint32_t          blindFreq;
+        bool              islocked;
+    }fe_dev_t;
+
+    typedef enum {
+        STATE_INITIAL_IDLE,
+        STATE_TUNE_START,
+        STATE_SCAN_START,
+        STATE_TUNE_IDLE,
+        STATE_STOP,
+    }e_event_stat_t;
+
+    fe_dev_t* getFeDevice();
+
+private:
+    Frontend*         mContext;
+    std::mutex        mThreadLock;
+    std::mutex        mThreadStatLock;
+    e_event_stat_t    mThreadState;
+    fe_dev_t          mDev;
+    bool              unsupportSystem;
+
+    virtual bool        threadLoop(void);
+    virtual status_t    readyToRun(void);
+    virtual void        onFirstRef(void);
+
+    uint32_t getClockMilliSeconds(void);
+    int getTheadState(void);
+    void updateThreadState(int state);
+
+    int setFeSystem();
+    int internalTune(const FrontendSettings & settings);
+    int blindTune(const FrontendSettings& settings);
+};
+
+}  // namespace implementation
+}  // namespace V1_0
+}  // namespace tuner
+}  // namespace tv
+}  // namespace hardware
+}  // namespace android
+
+#endif  // ANDROID_HARDWARE_TV_TUNER_V1_0_FRONTEND_DEVICE_H_

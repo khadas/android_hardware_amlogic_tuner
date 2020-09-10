@@ -19,6 +19,12 @@
 #include "Frontend.h"
 #include <android/hardware/tv/tuner/1.0/IFrontendCallback.h>
 #include <utils/Log.h>
+#include "FrontendDvbtDevice.h"
+#include "FrontendAtscDevice.h"
+#include "FrontendAnalogDevice.h"
+#include "FrontendDvbcDevice.h"
+#include "FrontendDvbsDevice.h"
+#include "FrontendIsdbtDevice.h"
 
 namespace android {
 namespace hardware {
@@ -33,15 +39,34 @@ Frontend::Frontend(FrontendType type, FrontendId id, sp<Tuner> tuner) {
     mTunerService = tuner;
     // Init callback to nullptr
     mCallback = nullptr;
+    //hardware
+    if (type == FrontendType::DVBT) {
+        mFeDev = new FrontendDvbtDevice(id, type, this);
+    } else if (type == FrontendType::ATSC) {
+        mFeDev = new FrontendAtscDevice(id, type, this);
+    } else if (type == FrontendType::ANALOG) {
+        mFeDev = new FrontendAnalogDevice(id, type, this);
+    } else if (type == FrontendType::DVBC) {
+        mFeDev = new FrontendDvbcDevice(id, type, this);
+    } else if (type == FrontendType::DVBS) {
+        mFeDev = new FrontendDvbsDevice(id, type, this);
+    } else if (type == FrontendType::ISDBT) {
+        mFeDev = new FrontendIsdbtDevice(id, type, this);
+    } else {
+        mFeDev = new FrontendDevice(id, type, this);
+    }
 }
 
-Frontend::~Frontend() {}
+Frontend::~Frontend() {
+    mFeDev->release();
+}
 
 Return<Result> Frontend::close() {
     ALOGV("%s", __FUNCTION__);
     // Reset callback
     mCallback = nullptr;
     mIsLocked = false;
+    mFeDev->stop();
 
     return Result::SUCCESS;
 }
@@ -57,17 +82,20 @@ Return<Result> Frontend::setCallback(const sp<IFrontendCallback>& callback) {
     return Result::SUCCESS;
 }
 
-Return<Result> Frontend::tune(const FrontendSettings& /* settings */) {
+Return<Result> Frontend::tune(const FrontendSettings& settings) {
     ALOGV("%s", __FUNCTION__);
     if (mCallback == nullptr) {
         ALOGW("[   WARN   ] Frontend callback is not set when tune");
         return Result::INVALID_STATE;
     }
 
+    int ret = mFeDev->tune(settings);
     mTunerService->frontendStartTune(mId);
-    mCallback->onEvent(FrontendEventType::LOCKED);
-    mIsLocked = true;
-    return Result::SUCCESS;
+    //mCallback->onEvent(FrontendEventType::LOCKED);
+    //mIsLocked = true;
+
+    if (ret == 0) return Result::SUCCESS;
+    else return Result::UNAVAILABLE;
 }
 
 Return<Result> Frontend::stopTune() {
@@ -76,49 +104,26 @@ Return<Result> Frontend::stopTune() {
     mTunerService->frontendStopTune(mId);
     mIsLocked = false;
 
-    return Result::SUCCESS;
+    int ret = mFeDev->stopTune();
+
+    return (ret == 0)?Result::SUCCESS : Result::UNAVAILABLE;
 }
 
 Return<Result> Frontend::scan(const FrontendSettings& settings, FrontendScanType type) {
     ALOGV("%s", __FUNCTION__);
 
-    if (mType == FrontendType::ATSC) {
-        FrontendScanMessage msg;
-        msg.isLocked(true);
-        mCallback->onScanMessage(FrontendScanMessageType::LOCKED, msg);
-        mIsLocked = true;
-        return Result::SUCCESS;
-    }
-    if (mType != FrontendType::DVBT) {
-        return Result::UNAVAILABLE;
-    }
+    int ret = mFeDev->scan(settings, type);
 
-    FrontendScanMessage msg;
-
-    if (mIsLocked) {
-        msg.isEnd(true);
-        mCallback->onScanMessage(FrontendScanMessageType::END, msg);
-        return Result::SUCCESS;
-    }
-
-    uint32_t frequency = settings.dvbt().frequency;
-    if (type == FrontendScanType::SCAN_BLIND) {
-        frequency += 100;
-    }
-    msg.frequencies({frequency});
-    mCallback->onScanMessage(FrontendScanMessageType::FREQUENCY, msg);
-    msg.isLocked(true);
-    mCallback->onScanMessage(FrontendScanMessageType::LOCKED, msg);
-    mIsLocked = true;
-
-    return Result::SUCCESS;
+    return (ret == 0)?Result::SUCCESS : Result::UNAVAILABLE;
 }
 
 Return<Result> Frontend::stopScan() {
     ALOGV("%s", __FUNCTION__);
 
     mIsLocked = false;
-    return Result::SUCCESS;
+    int ret = mFeDev->stopScan();
+
+    return (ret == 0)?Result::SUCCESS : Result::UNAVAILABLE;
 }
 
 Return<void> Frontend::getStatus(const hidl_vec<FrontendStatusType>& statusTypes,
@@ -132,44 +137,44 @@ Return<void> Frontend::getStatus(const hidl_vec<FrontendStatusType>& statusTypes
         // assign randomly selected values for testing.
         switch (type) {
             case FrontendStatusType::DEMOD_LOCK: {
-                status.isDemodLocked(true);
+                status.isDemodLocked(mIsLocked);
                 break;
             }
             case FrontendStatusType::SNR: {
-                status.snr(221);
+                status.snr(mFeDev->getFeSnr());
                 break;
             }
             case FrontendStatusType::BER: {
-                status.ber(1);
+                status.ber(mFeDev->getFeBer());
                 break;
             }
             case FrontendStatusType::PER: {
-                status.per(2);
+                status.per(0);//TODO::how to gt PER
                 break;
             }
             case FrontendStatusType::PRE_BER: {
-                status.preBer(3);
+                status.preBer(0);//TODO::how to get PRE_BER
                 break;
             }
             case FrontendStatusType::SIGNAL_QUALITY: {
-                status.signalQuality(4);
+                status.signalQuality(mFeDev->getFeSnr());//TODO::use snr as dtvkit now
                 break;
             }
             case FrontendStatusType::SIGNAL_STRENGTH: {
-                status.signalStrength(5);
+                status.signalStrength(mFeDev->getSingnalStrenth());
                 break;
             }
             case FrontendStatusType::SYMBOL_RATE: {
-                status.symbolRate(6);
+                status.symbolRate(0);
                 break;
             }
             case FrontendStatusType::FEC: {
-                status.innerFec(FrontendInnerFec::FEC_2_9);  // value = 1 << 7
+                FrontendInnerFec fec = FrontendInnerFec::AUTO;
+                status.innerFec(fec);
                 break;
             }
             case FrontendStatusType::MODULATION: {
-                FrontendModulationStatus modulationStatus;
-                modulationStatus.isdbt(FrontendIsdbtModulation::MOD_16QAM);  // value = 1 << 3
+                FrontendModulationStatus modulationStatus = mFeDev->getFeModulationStatus();
                 status.modulation(modulationStatus);
                 break;
             }
@@ -215,7 +220,7 @@ Return<void> Frontend::getStatus(const hidl_vec<FrontendStatusType>& statusTypes
                 break;
             }
             case FrontendStatusType::RF_LOCK: {
-                status.isRfLocked(false);
+                status.isRfLocked(mIsLocked);
                 break;
             }
             case FrontendStatusType::ATSC3_PLP_INFO: {
@@ -276,6 +281,26 @@ bool Frontend::supportsSatellite() {
 bool Frontend::isLocked() {
     return mIsLocked;
 }
+
+void Frontend::sendScanCallBack(uint32_t freq, bool isLocked, bool isEnd) {
+    mIsLocked = isLocked;
+    FrontendScanMessage msg;
+    msg.isLocked(isLocked);
+    mCallback->onScanMessage(FrontendScanMessageType::LOCKED, msg);
+    msg.isEnd(isEnd);
+    mCallback->onScanMessage(FrontendScanMessageType::END, msg);
+    msg.frequencies({freq});
+    mCallback->onScanMessage(FrontendScanMessageType::FREQUENCY, msg);
+}
+
+void Frontend::sendEventCallBack(bool isLocked) {
+    if (mIsLocked != isLocked) {
+        mIsLocked = isLocked;
+        mIsLocked ? mCallback->onEvent(FrontendEventType::LOCKED):
+                    mCallback->onEvent(FrontendEventType::LOST_LOCK);
+    }
+}
+
 }  // namespace implementation
 }  // namespace V1_0
 }  // namespace tuner

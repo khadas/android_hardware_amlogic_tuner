@@ -18,6 +18,8 @@
 #define ANDROID_HARDWARE_TV_TUNER_V1_0_FRONTEND_H_
 
 #include <android/hardware/tv/tuner/1.0/IFrontend.h>
+#include <utils/Thread.h>
+#include "FrontendDevice.h"
 #include <fstream>
 #include <iostream>
 #include "Tuner.h"
@@ -38,6 +40,7 @@ using ::android::hardware::tv::tuner::V1_0::IFrontendCallback;
 using ::android::hardware::tv::tuner::V1_0::Result;
 
 class Tuner;
+class FrontendDevice;
 
 class Frontend : public IFrontend {
   public:
@@ -70,6 +73,9 @@ class Frontend : public IFrontend {
 
     bool isLocked();
 
+    void sendScanCallBack(uint32_t freq, bool isLocked, bool isEnd);
+    void sendEventCallBack(bool isLocked);
+
   private:
     virtual ~Frontend();
     bool supportsSatellite();
@@ -78,6 +84,7 @@ class Frontend : public IFrontend {
     FrontendType mType = FrontendType::UNDEFINED;
     FrontendId mId = 0;
     bool mIsLocked = false;
+    sp<FrontendDevice> mFeDev;
 
     std::ifstream mFrontendData;
 };

@@ -4,6 +4,13 @@ cc_defaults {
     vendor: true,
     relative_install_path: "hw",
     srcs: [
+        "frontenddevices/FrontendDevice.cpp",
+        "frontenddevices/FrontendDvbtDevice.cpp",
+        "frontenddevices/FrontendAtscDevice.cpp",
+        "frontenddevices/FrontendAnalogDevice.cpp",
+        "frontenddevices/FrontendDvbcDevice.cpp",
+        "frontenddevices/FrontendDvbsDevice.cpp",
+        "frontenddevices/FrontendIsdbtDevice.cpp",
         "Filter.cpp",
         "Frontend.cpp",
         "Descrambler.cpp",
@@ -32,11 +39,18 @@ cc_defaults {
     header_libs: [
         "media_plugin_headers",
     ],
+    include_dirs: [
+        "hardware/amlogic/tuner/frontenddevices",
+        "vendor/amlogic/common/prebuilt/dvb/ndk/include",
+    ],
+    cflags: [
+        "-Wno-unused-parameter"
+    ]
 }
 
 cc_binary {
     name: "android.hardware.tv.tuner@1.0-service.droidlogic",
     vintf_fragments: ["android.hardware.tv.tuner@1.0-service.droidlogic.xml"],
-    defaults: ["tuner_service_defaults"],
+    defaults: ["tuner_service_droidlogic"],
     init_rc: ["android.hardware.tv.tuner@1.0-service.droidlogic.rc"],
 }
