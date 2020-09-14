@@ -31,9 +31,26 @@ namespace implementation {
 Demux::Demux(uint32_t demuxId, sp<Tuner> tuner) {
     mDemuxId = demuxId;
     mTunerService = tuner;
+    mDemuxWrap.reset(new AmHwMultiDemuxWrapper());
+    mDemuxWrap->setListener(this);
+    Am_DemuxWrapper_OpenPara_t parm;
+    parm.dev_no = mDemuxId;
+    parm.device_type = TS_DEMOD;
+    mDemuxWrap->AmDemuxWrapperOpen(&parm);
 }
 
 Demux::~Demux() {}
+
+void Demux::postData(int fid, const uint8_t *data, int len) {
+    ALOGD("[Demux] add data fid =%d, len = %d", fid, len);
+    vector<uint8_t> tmpData;
+    tmpData.resize(len);
+    memcpy(tmpData.data(), data, len);
+    ALOGD("[Demux] add data tmpdata size =%d", tmpData.size());
+    updateFilterOutput(fid, tmpData);
+    mDvrPlayback->getDvrEventFlag()->wake(static_cast<uint32_t>(DemuxQueueNotifyBits::DATA_READY));
+
+}
 
 Return<Result> Demux::setFrontendDataSource(uint32_t frontendId) {
     ALOGV("%s", __FUNCTION__);
@@ -86,7 +103,45 @@ Return<void> Demux::openFilter(const DemuxFilterType& type, uint32_t bufferSize,
             result = mDvrPlayback->addPlaybackFilter(filterId, filter);
         }
     }
-
+    ALOGD("type.mainType = %d, type.subType.tsFilterType() = %d", type.mainType, type.subType.tsFilterType());
+     switch (type.mainType) {
+        case DemuxFilterMainType::TS:
+            switch (type.subType.tsFilterType()) {
+                case DemuxTsFilterType::UNDEFINED:
+                    break;
+                case DemuxTsFilterType::SECTION:
+                    mDemuxWrap->AmDemuxWrapperSetSectionParam(getFilterTpid(filterId),0);
+                    break;
+               // case DemuxTsFilterType::PES:
+                    //mDemuxWrap->
+                    //break;
+                //case DemuxTsFilterType::TS:
+                    //break;
+                case DemuxTsFilterType::AUDIO:
+                    mDemuxWrap->AmDemuxWrapperSetAudioParam(getFilterTpid(filterId), AFORMAT_UNKNOWN);
+                    break;
+                case DemuxTsFilterType::VIDEO:
+                    mDemuxWrap->AmDemuxWrapperSetVideoParam(600, VFORMAT_UNKNOWN);
+                    break;
+                default:
+                    break;
+            }
+            break;
+       case DemuxFilterMainType::MMTP:
+            /*mmtpSettings*/
+            break;
+        case DemuxFilterMainType::IP:
+            /*ipSettings*/
+            break;
+        case DemuxFilterMainType::TLV:
+            /*tlvSettings*/
+            break;
+        case DemuxFilterMainType::ALP:
+            /*alpSettings*/
+            break;
+        default:
+            break;
+    }
     _hidl_cb(result ? Result::SUCCESS : Result::INVALID_ARGUMENT, filter);
     return Void();
 }

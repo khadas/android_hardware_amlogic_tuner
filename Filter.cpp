@@ -224,14 +224,15 @@ void Filter::filterThreadLoop() {
             break;
         }
         mCallback->onFilterStatus(mFilterStatus);
-        break;
+        //break;
     }
 
     while (mFilterThreadRunning) {
-        uint32_t efState = 0;
+        //uint32_t efState = 0;
         // We do not wait for the last round of written data to be read to finish the thread
         // because the VTS can verify the reading itself.
         for (int i = 0; i < SECTION_WRITE_COUNT; i++) {
+            #if 0
             while (mFilterThreadRunning && mIsUsingFMQ) {
                 status_t status = mFilterEventFlag->wait(
                         static_cast<uint32_t>(DemuxQueueNotifyBits::DATA_CONSUMED), &efState,
@@ -242,7 +243,7 @@ void Filter::filterThreadLoop() {
                 }
                 break;
             }
-
+            #endif
             maySendFilterStatusCallback();
 
             while (mFilterThreadRunning) {
@@ -253,13 +254,13 @@ void Filter::filterThreadLoop() {
                 // After successfully write, send a callback and wait for the read to be done
                 mCallback->onFilterEvent(mFilterEvent);
                 mFilterEvent.events.resize(0);
-                break;
+                //break;
             }
             // We do not wait for the last read to be done
             // VTS can verify the read result itself.
             if (i == SECTION_WRITE_COUNT - 1) {
                 ALOGD("[Filter] filter %d writing done. Ending thread", mFilterId);
-                break;
+                //break;
             }
         }
         mFilterThreadRunning = false;
@@ -460,6 +461,49 @@ Result Filter::startMediaFilterHandler() {
     if (mFilterOutput.empty()) {
         return Result::SUCCESS;
     }
+    #if 1
+    int av_fd = createAvIonFd(mFilterOutput.size());
+    if (av_fd == -1) {
+       return Result::UNKNOWN_ERROR;
+    }
+    // copy the filtered data to the buffer
+    uint8_t* avBuffer = getIonBuffer(av_fd, mFilterOutput.size());
+    if (avBuffer == NULL) {
+       return Result::UNKNOWN_ERROR;
+    }
+    memcpy(avBuffer, mFilterOutput.data(), mFilterOutput.size() * sizeof(uint8_t));
+
+    native_handle_t* nativeHandle = createNativeHandle(av_fd);
+    if (nativeHandle == NULL) {
+       return Result::UNKNOWN_ERROR;
+    }
+    hidl_handle handle;
+    handle.setTo(nativeHandle, /*shouldOwn=*/true);
+
+    // Create a dataId and add a <dataId, av_fd> pair into the dataId2Avfd map
+    uint64_t dataId = mLastUsedDataId++ /*createdUID*/;
+    mDataId2Avfd[dataId] = dup(av_fd);
+
+    // Create mediaEvent and send callback
+    DemuxFilterMediaEvent mediaEvent;
+    mediaEvent = {
+           .avMemory = std::move(handle),
+           .dataLength = static_cast<uint32_t>(mFilterOutput.size()),
+           .avDataId = dataId,
+    };
+    int size = mFilterEvent.events.size();
+    mFilterEvent.events.resize(size + 1);
+    mFilterEvent.events[size].media(mediaEvent);
+
+    // Clear and log
+    mFilterOutput.clear();
+    mAvBufferCopyCount = 0;
+    ::close(av_fd);
+    if (DEBUG_FILTER) {
+       ALOGD("[Filter] assembled av data length %d", mediaEvent.dataLength);
+    }
+
+    #else
     for (int i = 0; i < mFilterOutput.size(); i += 188) {
         if (mPesSizeLeft == 0) {
             uint32_t prefix = (mFilterOutput[i + 4] << 16) | (mFilterOutput[i + 5] << 8) |
@@ -536,7 +580,7 @@ Result Filter::startMediaFilterHandler() {
     }
 
     mFilterOutput.clear();
-
+    #endif
     return Result::SUCCESS;
 }
 

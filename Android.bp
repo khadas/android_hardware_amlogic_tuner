@@ -11,6 +11,20 @@ cc_defaults {
         "frontenddevices/FrontendDvbcDevice.cpp",
         "frontenddevices/FrontendDvbsDevice.cpp",
         "frontenddevices/FrontendIsdbtDevice.cpp",
+        "utils/TSPMessage.cpp",
+        "utils/TSPLooper.cpp",
+        "utils/TSPLooperRoster.cpp",
+        "utils/String8.cpp",
+        "utils/String16.cpp",
+        "utils/Unicode.cpp",
+        "utils/SharedBuffer.cpp",
+        "utils/VectorImpl.cpp",
+        "utils/Threads.cpp",
+        "utils/Timers.cpp",
+        "utils/FileSystemIo.cpp",
+        "MultiHwDemux/AmDmx.cpp",
+        "MultiHwDemux/AmLinuxDvb.cpp",
+        "MultiHwDemux/AmHwMultiDemuxWrapper.cpp",
         "Filter.cpp",
         "Frontend.cpp",
         "Descrambler.cpp",
@@ -35,17 +49,33 @@ cc_defaults {
         "liblog",
         "libstagefright_foundation",
         "libutils",
+        "libsystemcontrolservice",
+        "vendor.amlogic.hardware.systemcontrol@1.0",
+        "vendor.amlogic.hardware.systemcontrol@1.1",
     ],
     header_libs: [
         "media_plugin_headers",
     ],
-    include_dirs: [
-        "hardware/amlogic/tuner/frontenddevices",
-        "vendor/amlogic/common/prebuilt/dvb/ndk/include",
+
+    local_include_dirs: [
+        "MultiHwDemux",
+        "utils",
     ],
+
     cflags: [
-        "-Wno-unused-parameter"
-    ]
+        "-Wno-unused-parameter",
+        "-Wall",
+        "-Wno-unused-function",
+        "-Wno-deprecated-declarations",
+        "-Wno-deprecated-register",
+    ],
+
+    include_dirs: [
+       "hardware/amlogic/tuner/frontenddevices",
+        "vendor/amlogic/common/prebuilt/dvb/ndk/include",
+        "vendor/amlogic/common/frameworks/services/systemcontrol",
+        "vendor/amlogic/common/frameworks/services/systemcontrol/PQ/include",
+    ],
 }
 
 cc_binary {
