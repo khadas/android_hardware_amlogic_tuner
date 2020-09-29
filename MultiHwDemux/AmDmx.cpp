@@ -103,35 +103,44 @@ static AM_ErrorCode_t read_dmx_non_sec_es_data(void *arg,
 pthread_mutex_unlock(&dev->lock);
 #endif
                 break;
+            } else {
+                //ALOGE("TEST: try to read head size:%d, got data len:%u", headersize, ((dmx_non_sec_es_header*)sec_buf)->len);
             }
             esHeader = (dmx_non_sec_es_header*)sec_buf;
-            sec_len = esHeader->len;
-            ret  = dev->drv->dvb_read(dev, filter, sec_buf+headersize, &sec_len,false);
-            if (ret != AM_SUCCESS) {
-              //  ALOGI("dmx_non_sec_es_data break 2 \n");
+            uint32_t reaminSize = esHeader->len;
+            int buffSize = 10*1024*1024;
+            int readsize = (reaminSize > buffSize) ? buffSize : reaminSize;
+            while (reaminSize > 0) {
+                //ALOGE("TEST: try to read data size:%d, remain size:%d", readsize, reaminSize);
+                ret  = dev->drv->dvb_read(dev, filter, sec_buf, &readsize,false);
+                if (ret != AM_SUCCESS) {
+                    ALOGI("dmx_non_sec_es_data failed:%d \n", ret);
 #ifndef DMX_WAIT_CB
-pthread_mutex_unlock(&dev->lock);
+    pthread_mutex_unlock(&dev->lock);
 #endif
-                break;
+                    continue;
+                } else {
+                    reaminSize = reaminSize - readsize;
+#ifndef DMX_WAIT_CB
+                    pthread_mutex_unlock(&dev->lock);
+#endif
+                    if (ret == AM_DMX_ERR_TIMEOUT) {
+                        sec = NULL;
+                        sec_len = 0;
+                    } else if (ret != AM_SUCCESS) {
+                        return ret;
+                    } else {
+                        sec = sec_buf;
+                    }
+
+                    if (cb) {
+                        //ALOGE("TEST: send callback size:%d", readsize);
+                        cb(dev->mDemuxWrapper, id, sec, readsize, data);
+                    }
+                    readsize = (reaminSize > buffSize) ? buffSize : reaminSize;
+                }
             }
-        }
-
-#ifndef DMX_WAIT_CB
-        pthread_mutex_unlock(&dev->lock);
-#endif
-
-        if (ret == AM_DMX_ERR_TIMEOUT) {
-            sec = NULL;
-            sec_len = 0;
-        } else if (ret != AM_SUCCESS) {
-            return ret;
-        } else {
-            sec = sec_buf;
-        }
-
-        if (cb) {
-            cb(dev->mDemuxWrapper, id, sec, sec_len+headersize, data);
-        }
+       }
     }
     // ALOGI("dmx_non_sec_es_data out \n");
     return ret;
@@ -194,8 +203,8 @@ void* AM_DMX_Device::dmx_data_thread(void *arg) {
     AM_ErrorCode_t ret;
 
     int BUF_SIZE = sizeof(dmx_sec_es_data) * 500;
-    int BUF_SIZE2 = 500*1024;
-    sec_buf = (uint8_t*)malloc(BUF_SIZE);
+    int BUF_SIZE2 = 10*1024*1024;
+    sec_buf = (uint8_t*)malloc(BUF_SIZE2);
 
     while (dev->enable_thread) {
         AM_DMX_FILTER_MASK_CLEAR(&mask);

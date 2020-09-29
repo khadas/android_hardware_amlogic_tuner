@@ -26,15 +26,15 @@
 
 static void getVideoEsData(AmHwMultiDemuxWrapper* mDemuxWrapper,int fid,const uint8_t *data, int len, void *user_data) {
 
-    //   ALOGI("AmHwMultiDemuxWrapper getVideoEsData ---> len:%d \n",len);
+    //ALOGI("AmHwMultiDemuxWrapper getVideoEsData ---> len:%d \n",len);
     (void)fid;
     (void)user_data;
+    //ALOGE("get video data len:%d", len);
+    if (mDemuxWrapper->mNotifyListener) {
+        mDemuxWrapper->mNotifyListener->postData(fid, data, len);
+    }
 
-    #if 0
-        if (mDemuxWrapper->mNotifyListener) {
-            mDemuxWrapper->mNotifyListener->postData(fid, data, len);
-        }
-    #else
+#if 0
     int dmx_sec_es_data_size = sizeof(dmx_sec_es_data);
     int dmx_sec_es_data_count = len / dmx_sec_es_data_size;
     int i = 0;
@@ -68,7 +68,7 @@ static void getVideoEsData(AmHwMultiDemuxWrapper* mDemuxWrapper,int fid,const ui
         //msg->post();
         usleep(500);
     }
-    #endif
+#endif
     return;
 }
 
@@ -357,7 +357,7 @@ AM_DmxErrorCode_t AmHwMultiDemuxWrapper::AmDemuxWrapperSetVideoParam(int vid, AM
     vparam.output = DMX_OUT_TAP;
     vparam.flags = 0;
     vparam.flags |= DMX_ES_OUTPUT;
-    vparam.flags |= DMX_OUTPUT_RAW_MODE;
+    //vparam.flags |= DMX_OUTPUT_RAW_MODE;
 
     ALOGI("vparam.flags : 0x%x  \n",vparam.flags );
 
@@ -374,7 +374,7 @@ AM_DmxErrorCode_t AmHwMultiDemuxWrapper::AmDemuxWrapperSetVideoParam(int vid, AM
     }
 
     ALOGE("AmDemuxWrapperSetVideoParam AM_DMX_SetBufferSize\n");
-    if (AmDmxDevice->AM_DMX_SetBufferSize(fid_video, 1024*1024) != AM_SUCCESS ) {
+    if (AmDmxDevice->AM_DMX_SetBufferSize(fid_video, 1024*1024*10) != AM_SUCCESS ) {
         ALOGI("video AM_DMX_SetBufferSize error \n");
         return AM_Dmx_ERR_SYS;
     }

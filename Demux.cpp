@@ -42,14 +42,13 @@ Demux::Demux(uint32_t demuxId, sp<Tuner> tuner) {
 Demux::~Demux() {}
 
 void Demux::postData(int fid, const uint8_t *data, int len) {
-    ALOGD("[Demux] add data fid =%d, len = %d", fid, len);
+    //ALOGD("[Demux] add data fid =%d, len = %d", fid, len);
     vector<uint8_t> tmpData;
     tmpData.resize(len);
     memcpy(tmpData.data(), data, len);
-    ALOGD("[Demux] add data tmpdata size =%d", tmpData.size());
+    //ALOGD("[Demux] add data tmpdata size =%d", tmpData.size());
     updateFilterOutput(fid, tmpData);
     mDvrPlayback->getDvrEventFlag()->wake(static_cast<uint32_t>(DemuxQueueNotifyBits::DATA_READY));
-
 }
 
 Return<Result> Demux::setFrontendDataSource(uint32_t frontendId) {
@@ -121,7 +120,7 @@ Return<void> Demux::openFilter(const DemuxFilterType& type, uint32_t bufferSize,
                     mDemuxWrap->AmDemuxWrapperSetAudioParam(getFilterTpid(filterId), AFORMAT_UNKNOWN);
                     break;
                 case DemuxTsFilterType::VIDEO:
-                    mDemuxWrap->AmDemuxWrapperSetVideoParam(600, VFORMAT_UNKNOWN);
+                    mDemuxWrap->AmDemuxWrapperSetVideoParam(49, VFORMAT_UNKNOWN);
                     break;
                 default:
                     break;

@@ -458,7 +458,7 @@ Result Filter::startTsFilterHandler() {
 
 Result Filter::startMediaFilterHandler() {
     std::lock_guard<std::mutex> lock(mFilterEventLock);
-    if (mFilterOutput.empty()) {
+    if (mFilterOutput.empty() || mFilterOutput.size() < 1024*1024*10) {
         return Result::SUCCESS;
     }
     #if 1
