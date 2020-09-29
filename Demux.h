@@ -92,6 +92,7 @@ class Demux : public IDemux, public DemuxDataNotify {
     uint16_t getFilterTpid(uint32_t filterId);
     void setIsRecording(bool isRecording);
     void startFrontendInputLoop();
+    std::shared_ptr<AmHwMultiDemuxWrapper> getDemuxWrapper();
 
     /**
      * A dispatcher to read and dispatch input data to all the started filters.
@@ -189,7 +190,7 @@ class Demux : public IDemux, public DemuxDataNotify {
     // TODO handle mulptiple Pes filters
     int mPesSizeLeft = 0;
     vector<uint8_t> mPesOutput;
-    std::unique_ptr<AmHwMultiDemuxWrapper> mDemuxWrap;
+    std::shared_ptr<AmHwMultiDemuxWrapper> mDemuxWrap;
 
     const bool DEBUG_DEMUX = false;
 };

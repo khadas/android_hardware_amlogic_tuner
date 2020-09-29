@@ -51,6 +51,10 @@ void Demux::postData(int fid, const uint8_t *data, int len) {
     mDvrPlayback->getDvrEventFlag()->wake(static_cast<uint32_t>(DemuxQueueNotifyBits::DATA_READY));
 }
 
+std::shared_ptr<AmHwMultiDemuxWrapper> Demux::getDemuxWrapper() {
+    return mDemuxWrap;
+}
+
 Return<Result> Demux::setFrontendDataSource(uint32_t frontendId) {
     ALOGV("%s", __FUNCTION__);
 
@@ -101,45 +105,6 @@ Return<void> Demux::openFilter(const DemuxFilterType& type, uint32_t bufferSize,
         if (mDvrPlayback != nullptr) {
             result = mDvrPlayback->addPlaybackFilter(filterId, filter);
         }
-    }
-    ALOGD("type.mainType = %d, type.subType.tsFilterType() = %d", type.mainType, type.subType.tsFilterType());
-     switch (type.mainType) {
-        case DemuxFilterMainType::TS:
-            switch (type.subType.tsFilterType()) {
-                case DemuxTsFilterType::UNDEFINED:
-                    break;
-                case DemuxTsFilterType::SECTION:
-                    mDemuxWrap->AmDemuxWrapperSetSectionParam(getFilterTpid(filterId),0);
-                    break;
-               // case DemuxTsFilterType::PES:
-                    //mDemuxWrap->
-                    //break;
-                //case DemuxTsFilterType::TS:
-                    //break;
-                case DemuxTsFilterType::AUDIO:
-                    mDemuxWrap->AmDemuxWrapperSetAudioParam(getFilterTpid(filterId), AFORMAT_UNKNOWN);
-                    break;
-                case DemuxTsFilterType::VIDEO:
-                    mDemuxWrap->AmDemuxWrapperSetVideoParam(49, VFORMAT_UNKNOWN);
-                    break;
-                default:
-                    break;
-            }
-            break;
-       case DemuxFilterMainType::MMTP:
-            /*mmtpSettings*/
-            break;
-        case DemuxFilterMainType::IP:
-            /*ipSettings*/
-            break;
-        case DemuxFilterMainType::TLV:
-            /*tlvSettings*/
-            break;
-        case DemuxFilterMainType::ALP:
-            /*alpSettings*/
-            break;
-        default:
-            break;
     }
     _hidl_cb(result ? Result::SUCCESS : Result::INVALID_ARGUMENT, filter);
     return Void();

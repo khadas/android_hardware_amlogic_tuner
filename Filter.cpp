@@ -100,11 +100,36 @@ Return<void> Filter::getQueueDesc(getQueueDesc_cb _hidl_cb) {
 
 Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
     ALOGV("%s", __FUNCTION__);
-
+    std::shared_ptr<AmHwMultiDemuxWrapper> demuxWrapper = mDemux->getDemuxWrapper();
+    if (demuxWrapper == NULL) {
+        return Result::INVALID_ARGUMENT;
+    }
+    ALOGD("type.mainType = %d, type.subType.tsFilterType() = %d", mType.mainType, mType.subType.tsFilterType());
     mFilterSettings = settings;
     switch (mType.mainType) {
         case DemuxFilterMainType::TS:
             mTpid = settings.ts().tpid;
+            ALOGD("mTpid = %d", mTpid);
+        switch (mType.subType.tsFilterType()) {
+            case DemuxTsFilterType::UNDEFINED:
+                break;
+            case DemuxTsFilterType::SECTION:
+                demuxWrapper->AmDemuxWrapperSetSectionParam(mTpid, 0);
+                break;
+           // case DemuxTsFilterType::PES:
+                //mDemuxWrap->
+                //break;
+            //case DemuxTsFilterType::TS:
+                //break;
+            case DemuxTsFilterType::AUDIO:
+                demuxWrapper->AmDemuxWrapperSetAudioParam(mTpid, AFORMAT_UNKNOWN);
+                break;
+            case DemuxTsFilterType::VIDEO:
+                demuxWrapper->AmDemuxWrapperSetVideoParam(mTpid, VFORMAT_UNKNOWN);
+                break;
+            default:
+                break;
+        }
             break;
         case DemuxFilterMainType::MMTP:
             break;
