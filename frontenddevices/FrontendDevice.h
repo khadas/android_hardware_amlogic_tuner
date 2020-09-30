@@ -21,6 +21,7 @@
 
 #define CONFIG_AMLOGIC_DVB_COMPAT
 #include "linux/dvb/frontend.h"
+#include <semaphore.h>
 
 using namespace std;
 
@@ -40,6 +41,7 @@ public:
     virtual void release();
     bool checkOpen(bool autoOpen);
     virtual void stop();
+    virtual void clearTuner();
     virtual int  tune(const FrontendSettings& settings);
     virtual int  scan(const FrontendSettings& settings, FrontendScanType type);
     uint16_t getFeSnr();
@@ -59,6 +61,7 @@ public:
         FrontendType      type;
         FrontendSettings* feSettings;
         uint32_t          blindFreq;
+        uint32_t          tuneFreq;
         bool              islocked;
     }fe_dev_t;
 
@@ -68,24 +71,35 @@ public:
         STATE_SCAN_START,
         STATE_TUNE_IDLE,
         STATE_STOP,
+        STATE_FINISH,
     }e_event_stat_t;
+
+    typedef enum {
+        SUCCESS = 0,
+        UNAVAILABLE,
+        NOT_INITIALIZED,
+        INVALID_STATE,
+        INVALID_ARGUMENT,
+        OUT_OF_MEMORY,
+        UNKNOWN_ERROR,
+    }e_return_ret_t;
 
     fe_dev_t* getFeDevice();
 
 private:
-    Frontend*         mContext;
-    std::mutex        mThreadLock;
-    std::mutex        mThreadStatLock;
-    e_event_stat_t    mThreadState;
-    fe_dev_t          mDev;
-    bool              unsupportSystem;
+    Frontend*        mContext;
+    sem_t            threadSemaphore;
+    std::mutex       mThreadStatLock;
+    e_event_stat_t   mThreadState;
+    fe_dev_t         mDev;
+    bool             unsupportSystem;
 
-    virtual bool        threadLoop(void);
-    virtual status_t    readyToRun(void);
-    virtual void        onFirstRef(void);
+    virtual bool     threadLoop(void);
+    virtual status_t readyToRun(void);
+    virtual void     onFirstRef(void);
 
     uint32_t getClockMilliSeconds(void);
-    int getTheadState(void);
+    int getThreadState(void);
     void updateThreadState(int state);
 
     int setFeSystem();

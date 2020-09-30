@@ -94,8 +94,7 @@ Return<Result> Frontend::tune(const FrontendSettings& settings) {
     //mCallback->onEvent(FrontendEventType::LOCKED);
     //mIsLocked = true;
 
-    if (ret == 0) return Result::SUCCESS;
-    else return Result::UNAVAILABLE;
+    return Result(ret);
 }
 
 Return<Result> Frontend::stopTune() {
@@ -106,7 +105,7 @@ Return<Result> Frontend::stopTune() {
 
     int ret = mFeDev->stopTune();
 
-    return (ret == 0)?Result::SUCCESS : Result::UNAVAILABLE;
+    return Result(ret);
 }
 
 Return<Result> Frontend::scan(const FrontendSettings& settings, FrontendScanType type) {
@@ -114,7 +113,7 @@ Return<Result> Frontend::scan(const FrontendSettings& settings, FrontendScanType
 
     int ret = mFeDev->scan(settings, type);
 
-    return (ret == 0)?Result::SUCCESS : Result::UNAVAILABLE;
+    return Result(ret);
 }
 
 Return<Result> Frontend::stopScan() {
@@ -123,7 +122,7 @@ Return<Result> Frontend::stopScan() {
     mIsLocked = false;
     int ret = mFeDev->stopScan();
 
-    return (ret == 0)?Result::SUCCESS : Result::UNAVAILABLE;
+    return Result(ret);
 }
 
 Return<void> Frontend::getStatus(const hidl_vec<FrontendStatusType>& statusTypes,

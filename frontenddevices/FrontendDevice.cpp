@@ -41,6 +41,7 @@ FrontendDevice::FrontendDevice(uint32_t hwId, FrontendType type, Frontend* conte
     mDev.devFd = -1;
     mDev.feSettings = NULL;
     mDev.blindFreq = 0;
+    mDev.tuneFreq = 0;
     mDev.islocked = false;
     if (type == FrontendType::ATSC3
         || type == FrontendType::ISDBS
@@ -49,6 +50,7 @@ FrontendDevice::FrontendDevice(uint32_t hwId, FrontendType type, Frontend* conte
     } else {
         unsupportSystem = false;
     }
+    sem_init(&threadSemaphore, 0, 1);
 }
 
 FrontendModulationStatus FrontendDevice::getFeModulationStatus() {
@@ -59,8 +61,8 @@ FrontendModulationStatus FrontendDevice::getFeModulationStatus() {
 }
 
 FrontendDevice::~FrontendDevice() {
-    if (mDev.devFd != -1)
-        ::close(mDev.devFd);
+    release();
+    sem_destroy(&threadSemaphore);
 }
 
 FrontendDevice::fe_dev_t* FrontendDevice::getFeDevice() {
@@ -68,13 +70,24 @@ FrontendDevice::fe_dev_t* FrontendDevice::getFeDevice() {
 }
 
 void FrontendDevice::release() {
+    updateThreadState(FrontendDevice::STATE_FINISH);
+    sem_post(&threadSemaphore);
+    clearTuner();
     if (mDev.devFd != -1)
         ::close(mDev.devFd);
+
+    requestExitAndWait();
 }
 
 void FrontendDevice::stop() {
-    if (mDev.devFd != -1)
+    updateThreadState(FrontendDevice::STATE_STOP);
+    clearTuner();
+    mDev.tuneFreq = 0;
+    if (mDev.devFd != -1) {
         ::close(mDev.devFd);
+        mDev.devFd = -1;
+    }
+    ALOGE("%s finish.", __FUNCTION__);
 }
 
 bool FrontendDevice::checkOpen(bool autoOpen) {
@@ -107,42 +120,34 @@ int FrontendDevice::tune(const FrontendSettings & settings) {
 int FrontendDevice::internalTune(const FrontendSettings & settings) {
     ALOGE("%s", __FUNCTION__);
     dvb_frontend_parameters fe_params;
+
     FrontendSettings tuneSettings = settings;
     mDev.feSettings = &tuneSettings;
     if (getFrontendSettings(&tuneSettings, &fe_params) <0) {
         ALOGE("Wrong delivery system in FrontendSetgings, or not support it.");
-        return -1;
+        return INVALID_ARGUMENT;
     }
     getFeDevice()->blindFreq = fe_params.frequency =
         (fe_params.frequency < getFeDevice()->blindFreq)
         ? getFeDevice()->blindFreq : fe_params.frequency;
 
+    mDev.tuneFreq = fe_params.frequency;
     if (checkOpen(true)) {
         if (setFeSystem() != 0) {
             ALOGE("Set fe failed.");
-            return -1;
+            return INVALID_ARGUMENT;
         }
     } else {
         ALOGE("Open fe failed.");
-        return -1;
+        return UNAVAILABLE;
     }
 
-    ALOGE("Ready to start                           : ");
-    ALOGE("fe_params.frequency                      : %u", fe_params.frequency);
-    ALOGE("fe_params.u.ofdm.bandwidth               : %u", fe_params.u.ofdm.bandwidth);
-    ALOGE("fe_params.u.ofdm.code_rate_HP            : %u", fe_params.u.ofdm.code_rate_HP);
-    ALOGE("fe_params.u.ofdm.code_rate_LP            : %u", fe_params.u.ofdm.code_rate_LP);
-    ALOGE("fe_params.u.ofdm.constellation           : %u", fe_params.u.ofdm.constellation);
-    ALOGE("fe_params.u.ofdm.transmission_mode       : %u", fe_params.u.ofdm.transmission_mode);
-    ALOGE("fe_params.u.ofdm.guard_interval          : %u", fe_params.u.ofdm.guard_interval);
-    ALOGE("fe_params.u.ofdm.hierarchy_information   : %u", fe_params.u.ofdm.hierarchy_information);
     if (ioctl(mDev.devFd, FE_SET_FRONTEND, &fe_params) < 0) {
         ALOGE("%s error(%d):%s", __FUNCTION__, errno, strerror(errno));
-        return -1;
-    } else {
-        ALOGE("Set frontend success.");
+        return UNAVAILABLE;
     }
 
+    sem_post(&threadSemaphore);
     return 0;
 }
 
@@ -197,10 +202,8 @@ int FrontendDevice::setFeSystem() {
              .u.data = (enum fe_delivery_system)sys};
         struct dtv_properties props = {.num = 1, .props = &p};
         if (ioctl(mDev.devFd, FE_SET_PROPERTY, &props) == -1) {
-            ALOGE("Set fe system failed");
+            ALOGE("Set fe system failed: %s", strerror(errno));
             return -1;
-        } else {
-            ALOGE("Set fe system(%d) success", sys);
         }
         mDev.deliverySys = sys;
     }
@@ -211,9 +214,11 @@ int FrontendDevice::setFeSystem() {
 int FrontendDevice::blindTune(const FrontendSettings & settings) {
     struct dvb_frontend_info fe_info;
 
+    if (!checkOpen(true)) return UNAVAILABLE;
+
     if (mDev.blindFreq == 0) {
         if (ioctl(mDev.devFd, FE_GET_INFO, &fe_info) < 0 ) {
-            return -1;
+            return UNKNOWN_ERROR;
         }
         mDev.blindFreq = fe_info.frequency_min;
     }
@@ -223,7 +228,7 @@ int FrontendDevice::blindTune(const FrontendSettings & settings) {
 
 int FrontendDevice::scan(const FrontendSettings & settings, FrontendScanType type) {
 
-    if (!checkOpen(true)) return -1;
+    if (!checkOpen(true)) return UNAVAILABLE;
 
     if (type == FrontendScanType::SCAN_AUTO) {
         mDev.blindFreq = 0;
@@ -233,25 +238,36 @@ int FrontendDevice::scan(const FrontendSettings & settings, FrontendScanType typ
         return blindTune(settings);
     } else {
         mDev.blindFreq = 0;
-        return -1;
+        return INVALID_ARGUMENT;
     }
     return 0;
 }
 
+void FrontendDevice::clearTuner() {
+    if (!checkOpen(true)) return;
+
+    struct dtv_property p =
+        {.cmd = DTV_DELIVERY_SYSTEM,
+        .u.data = SYS_ANALOG};
+    struct dtv_properties props = {.num = 1, .props = &p};
+
+    ioctl(mDev.devFd, FE_SET_PROPERTY, &props);
+}
+
 int FrontendDevice::stopTune() {
-    updateThreadState(FrontendDevice::STATE_STOP);
+    stop();
     return 0;
 }
 
 int FrontendDevice::stopScan() {
-    updateThreadState(FrontendDevice::STATE_STOP);
+    stop();
+    mContext->sendScanCallBack(mDev.tuneFreq, false, true);
     return 0;
 }
 
 status_t FrontendDevice::readyToRun() {
     ALOGE("%s", __FUNCTION__);
     mThreadState = STATE_INITIAL_IDLE;
-    //mThreadLock.try_lock();
     return NO_ERROR;
 }
 
@@ -261,8 +277,7 @@ void FrontendDevice::onFirstRef(void) {
 }
 
 bool FrontendDevice::threadLoop() {
-    //mThreadLock.try_lock();
-    int state = getTheadState();
+    int state = getThreadState();
     bool stop;
     uint32_t start_time;
     struct pollfd pfd;
@@ -272,7 +287,7 @@ bool FrontendDevice::threadLoop() {
        || state == FrontendDevice::STATE_SCAN_START
        || state == FrontendDevice::STATE_TUNE_IDLE) {
         stop = false;
-        state = getTheadState();
+        state = getThreadState();
         if (state == FrontendDevice::STATE_STOP) {
             stop = true;
         }
@@ -287,32 +302,41 @@ bool FrontendDevice::threadLoop() {
              !stop && ((getClockMilliSeconds() - start_time) < 3000);) {
             if (poll(&pfd, 1, 50) == 1) {
                 if (ioctl(mDev.devFd, FE_GET_EVENT, &fe_event) >= 0) {
-                    ALOGE("FrontendDevice:status=0x%02x", fe_event.status);
-                    break;
+                    if ((fe_event.status & FE_HAS_LOCK) !=0) {
+                        break;
+                    }
                 }
             }
-            state = getTheadState();
+            state = getThreadState();
             if (state == FrontendDevice::STATE_STOP) {
                 stop = true;
             }
         }
         if (fe_event.status != 0) {
             bool locked = ((fe_event.status & FE_HAS_LOCK) !=0);
+            ALOGD("%s: get fe event: 0x%02x", __FUNCTION__, fe_event.status);
             if (state == STATE_SCAN_START) {
-                mContext->sendScanCallBack(474000000, locked, false);
+                ALOGD("%s: send scan event.", __FUNCTION__);
+                mContext->sendScanCallBack(mDev.tuneFreq, locked, false);
                 updateThreadState(FrontendDevice::STATE_STOP);
+            } else if (state == STATE_TUNE_START) {
+                ALOGD("%s: send tune event.", __FUNCTION__);
+                updateThreadState(FrontendDevice::STATE_TUNE_IDLE);
+                mContext->sendEventCallBack(locked);
             } else {
-                if (state == STATE_TUNE_START) {
-                    updateThreadState(FrontendDevice::STATE_TUNE_IDLE);
-                }
                 if (locked != mDev.islocked) {
+                    ALOGD("%s: send evt changed.", __FUNCTION__);
                     mContext->sendEventCallBack(locked);
                     mDev.islocked = locked;
                 }
             }
         }
-    } else {
-        usleep(1000*100);
+    } else if (state == FrontendDevice::STATE_STOP
+       || state == FrontendDevice::STATE_INITIAL_IDLE) {
+        ALOGD("%s: thread wait in stop state.", __FUNCTION__);
+        sem_wait(&threadSemaphore);
+    } else if (state == FrontendDevice::STATE_FINISH) {
+        usleep(1000*20);//wait to exit thread
     }
     return true;
 }
@@ -324,7 +348,7 @@ uint32_t FrontendDevice::getClockMilliSeconds(void) {
     return t.tv_sec*1000 + t.tv_usec/1000;
 }
 
-int FrontendDevice::getTheadState(void) {
+int FrontendDevice::getThreadState(void) {
     std::lock_guard<std::mutex> lock(mThreadStatLock);
     return (int)mThreadState;
 }
