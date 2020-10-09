@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:sharedUserId="android.uid.system"
+    package="com.droidlogic.tunerframeworksetup">
+
+    <!--<uses-sdk
+        android:minSdkVersion="28"
+        android:targetSdkVersion="28" />-->
+
+    <uses-permission android:name="android.permission.ACCESS_TV_TUNER" />
+    <uses-permission android:name="android.permission.READ_MEDIA_STORAGE"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" >
+        <activity
+            android:name=".SetupActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>
