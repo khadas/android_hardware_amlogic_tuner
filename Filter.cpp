@@ -100,36 +100,77 @@ Return<void> Filter::getQueueDesc(getQueueDesc_cb _hidl_cb) {
 
 Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
     ALOGV("%s", __FUNCTION__);
-    std::shared_ptr<AmHwMultiDemuxWrapper> demuxWrapper = mDemux->getDemuxWrapper();
-    if (demuxWrapper == NULL) {
-        return Result::INVALID_ARGUMENT;
-    }
-    ALOGD("type.mainType = %d, type.subType.tsFilterType() = %d", mType.mainType, mType.subType.tsFilterType());
+
     mFilterSettings = settings;
     switch (mType.mainType) {
         case DemuxFilterMainType::TS:
             mTpid = settings.ts().tpid;
-            ALOGD("mTpid = %d", mTpid);
-        switch (mType.subType.tsFilterType()) {
-            case DemuxTsFilterType::UNDEFINED:
-                break;
-            case DemuxTsFilterType::SECTION:
-                demuxWrapper->AmDemuxWrapperSetSectionParam(mTpid, 0);
-                break;
-           // case DemuxTsFilterType::PES:
-                //mDemuxWrap->
-                //break;
-            //case DemuxTsFilterType::TS:
-                //break;
-            case DemuxTsFilterType::AUDIO:
-                demuxWrapper->AmDemuxWrapperSetAudioParam(mTpid, AFORMAT_UNKNOWN);
-                break;
-            case DemuxTsFilterType::VIDEO:
-                demuxWrapper->AmDemuxWrapperSetVideoParam(mTpid, VFORMAT_UNKNOWN);
-                break;
-            default:
-                break;
-        }
+            switch (mType.subType.tsFilterType()) {
+                case DemuxTsFilterType::SECTION: {
+                    struct dmx_sct_filter_params param;
+                    if (mDemux->getAmDmxDevice()
+                        ->AM_DMX_SetBufferSize(mFilterId, 32*1024) != 0 ) {
+                        return Result::UNAVAILABLE;
+                    }
+                    memset(&param, 0, sizeof(param));
+                    param.pid = mTpid;
+                    param.filter.filter[0] = settings.ts().filterSettings
+                                             .section().condition.tableInfo().tableId;
+                    param.filter.mask[0] = 0xff;
+                    param.flags = DMX_CHECK_CRC;
+                    if (mDemux->getAmDmxDevice()
+                        ->AM_DMX_SetSecFilter(mFilterId, &param) != 0 ) {
+                        return Result::UNAVAILABLE;
+                    }
+                    break;
+                }
+                case DemuxTsFilterType::AUDIO: {
+                    struct dmx_pes_filter_params aparam;
+                    if (mDemux->getAmDmxDevice()
+                        ->AM_DMX_SetBufferSize(mFilterId, 1024*1024) != 0 ) {
+                        return Result::UNAVAILABLE;
+                    }
+                    memset(&aparam, 0, sizeof(aparam));
+                    aparam.pid = mTpid;
+                    aparam.pes_type = DMX_PES_AUDIO0;
+                    aparam.input = DMX_IN_FRONTEND;
+                    aparam.output = DMX_OUT_TAP;
+                    aparam.flags = 0;
+                    aparam.flags |= DMX_ES_OUTPUT;
+                    if (settings.ts().filterSettings.av().isPassthrough)
+                        aparam.flags |= DMX_OUTPUT_RAW_MODE;
+                    if (mDemux->getAmDmxDevice()
+                        ->AM_DMX_SetPesFilter(mFilterId, &aparam) != 0 ) {
+                        return Result::UNAVAILABLE;
+                    }
+                    break;
+                }
+                case DemuxTsFilterType::VIDEO: {
+                    struct dmx_pes_filter_params vparam;
+                    vparam.pid = mTpid;
+                    vparam.pes_type = DMX_PES_VIDEO0;
+                    vparam.input = DMX_IN_FRONTEND;
+                    vparam.output = DMX_OUT_TAP;
+                    vparam.flags = 0;
+                    vparam.flags |= DMX_ES_OUTPUT;
+                    int buffsize = 1024*1024*10;
+                    if (settings.ts().filterSettings.av().isPassthrough) {
+                        vparam.flags |= DMX_OUTPUT_RAW_MODE;
+                        buffsize = 1024*1024;
+                    }
+                    if (mDemux->getAmDmxDevice()
+                        ->AM_DMX_SetBufferSize(mFilterId, buffsize) != 0 ) {
+                        return Result::UNAVAILABLE;
+                    }
+                    if (mDemux->getAmDmxDevice()
+                        ->AM_DMX_SetPesFilter(mFilterId, &vparam) != 0 ) {
+                        return Result::UNAVAILABLE;
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
             break;
         case DemuxFilterMainType::MMTP:
             break;
@@ -148,6 +189,10 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
 
 Return<Result> Filter::start() {
     ALOGV("%s", __FUNCTION__);
+    if (mDemux->getAmDmxDevice()
+        ->AM_DMX_StartFilter(mFilterId) != 0 ) {
+        return Result::UNAVAILABLE;
+    }
 
     return startFilterLoop();
 }
@@ -155,6 +200,8 @@ Return<Result> Filter::start() {
 Return<Result> Filter::stop() {
     ALOGV("%s", __FUNCTION__);
 
+    mDemux->getAmDmxDevice()->AM_DMX_SetCallback(mFilterId, NULL, NULL);
+    mDemux->getAmDmxDevice()->AM_DMX_StopFilter(mFilterId);
     mFilterThreadRunning = false;
 
     std::lock_guard<std::mutex> lock(mFilterThreadLock);
@@ -188,6 +235,9 @@ Return<Result> Filter::releaseAvHandle(const hidl_handle& /*avMemory*/, uint64_t
 Return<Result> Filter::close() {
     ALOGV("%s", __FUNCTION__);
 
+    mDemux->getAmDmxDevice()->AM_DMX_SetCallback(mFilterId, NULL, NULL);
+    mDemux->getAmDmxDevice()->AM_DMX_StopFilter(mFilterId);
+    mDemux->getAmDmxDevice()->AM_DMX_FreeFilter(mFilterId);
     return mDemux->removeFilter(mFilterId);
 }
 

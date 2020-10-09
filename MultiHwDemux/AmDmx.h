@@ -19,7 +19,6 @@
 //#include <AmLinuxDvb.h>
 #include <pthread.h>
 #include <dmx.h>
-#include <AmHwMultiDemuxWrapper.h>
 
 #define DMX_FILTER_COUNT      (32)
 
@@ -79,7 +78,7 @@ typedef uint32_t AM_DMX_FilterMask_t;
 
 class AmHwMultiDemuxWrapper;
 
-typedef void (*AM_DMX_DataCb) (AmHwMultiDemuxWrapper* mDemuxWrapper, int fhandle, const uint8_t *data, int len, void *user_data);
+typedef void (*AM_DMX_DataCb) (void* device, int fhandle, bool passthrough);
 
 struct AM_DMX_Filter {
     void *drv_data; /**< 驱动私有数据*/
@@ -92,10 +91,11 @@ struct AM_DMX_Filter {
 };
 class AmLinuxDvd;
 
+using namespace android;
 class AM_DMX_Device : public RefBase{
 
 public:
-    AM_DMX_Device(AmHwMultiDemuxWrapper* DemuxWrapper);
+    AM_DMX_Device();
     ~AM_DMX_Device();
     AM_ErrorCode_t dmx_drv_open(dmx_input_source_t inputSource);
     AM_ErrorCode_t dmx_get_used_filter(int filter_id, AM_DMX_Filter **pf);
@@ -105,6 +105,7 @@ public:
     int dmx_free_filter(AM_DMX_Filter *filter);
     AM_ErrorCode_t AM_DMX_Open(void);
     AM_ErrorCode_t AM_DMX_Close(void);
+    AM_ErrorCode_t AM_DMX_Read(int fhandle, uint8_t* buff, int *size);
     AM_ErrorCode_t AM_DMX_AllocateFilter(int *fhandle);
     AM_ErrorCode_t AM_DMX_SetSecFilter(int fhandle, const struct dmx_sct_filter_params *params);
     AM_ErrorCode_t AM_DMX_SetPesFilter(int fhandle, const struct dmx_pes_filter_params *params);

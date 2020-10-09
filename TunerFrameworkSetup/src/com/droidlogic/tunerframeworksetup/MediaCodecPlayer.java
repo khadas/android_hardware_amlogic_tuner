@@ -177,7 +177,7 @@ public class MediaCodecPlayer {
                     assertTrue("Blocks obtained through LinearBlock.obtain must be mappable",
                             mLinearInputBlock.block.isMappable());
                 }*/
-                
+
                 mLinearInputBlock.block = linearBlock;
                 mInputSlotListener.onInputSlot(mMediaCodec, event.index, timestampUs, offset, length,  mLinearInputBlock, null);
                 try {
@@ -337,7 +337,9 @@ public class MediaCodecPlayer {
         @Override
         public void onInputBufferAvailable(MediaCodec codec, int index) {
             Log.d(TAG, "onInputBufferAvailable index = " + index);
-            mBufferQueue.offer(new SlotEvent(true, index));
+            if (!mStopping && mStarted) {
+                mBufferQueue.offer(new SlotEvent(true, index));
+            }
         }
 
         @Override
@@ -345,7 +347,9 @@ public class MediaCodecPlayer {
                 MediaCodec codec, int index, MediaCodec.BufferInfo info) {
             Log.d(TAG, "onOutputBufferAvailable = " + index);
             //mBufferQueue.offer(new SlotEvent(false, index));
-            codec.releaseOutputBuffer(index, true);
+            if (!mStopping && mStarted) {
+                codec.releaseOutputBuffer(index, true);
+            }
         }
 
         @Override

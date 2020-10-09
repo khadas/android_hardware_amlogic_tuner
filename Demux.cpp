@@ -31,28 +31,49 @@ namespace implementation {
 Demux::Demux(uint32_t demuxId, sp<Tuner> tuner) {
     mDemuxId = demuxId;
     mTunerService = tuner;
-    mDemuxWrap.reset(new AmHwMultiDemuxWrapper());
-    mDemuxWrap->setListener(this);
-    Am_DemuxWrapper_OpenPara_t parm;
-    parm.dev_no = mDemuxId;
-    parm.device_type = TS_DEMOD;
-    mDemuxWrap->AmDemuxWrapperOpen(&parm);
+    AmDmxDevice = new AM_DMX_Device();
+    AmDmxDevice->dev_no = demuxId;
 }
 
 Demux::~Demux() {}
 
-void Demux::postData(int fid, const uint8_t *data, int len) {
-    //ALOGD("[Demux] add data fid =%d, len = %d", fid, len);
+void Demux::postData(void* demux, int fid, bool passthrough) {
+    ALOGV("[Demux] received data from fid =%d", fid);
     vector<uint8_t> tmpData;
-    tmpData.resize(len);
-    memcpy(tmpData.data(), data, len);
-    //ALOGD("[Demux] add data tmpdata size =%d", tmpData.size());
-    updateFilterOutput(fid, tmpData);
-    mDvrPlayback->getDvrEventFlag()->wake(static_cast<uint32_t>(DemuxQueueNotifyBits::DATA_READY));
-}
+    Demux *dmxDev = (Demux*)demux;
 
-std::shared_ptr<AmHwMultiDemuxWrapper> Demux::getDemuxWrapper() {
-    return mDemuxWrap;
+    if (passthrough) {
+        int size = sizeof(dmx_sec_es_data)*500;
+        tmpData.resize(size);
+        int readRet = dmxDev->getAmDmxDevice()
+                      ->AM_DMX_Read(fid, tmpData.data(), &size);
+        if (readRet != 0) {
+            return;
+        } else {
+            dmxDev->updateFilterOutput(fid, tmpData);
+            dmxDev->startFilterHandler(fid);
+        }
+    } else {
+        int headerLen = sizeof(dmx_non_sec_es_header);
+        tmpData.resize(headerLen);
+        int readRet = dmxDev->getAmDmxDevice()
+                      ->AM_DMX_Read(fid, tmpData.data(), &headerLen);
+        if (readRet != 0) {
+            return;
+        } else {
+            dmx_non_sec_es_header* esHeader = (dmx_non_sec_es_header*)(tmpData.data());
+            uint32_t dataLen = esHeader->len;
+            //tmpData.resize(headerLen + dataLen);
+            tmpData.resize(dataLen);
+            readRet = 1;
+            while (readRet) {
+                readRet = dmxDev->getAmDmxDevice()
+                      ->AM_DMX_Read(fid, tmpData.data()/* + headerLen*/, (int*)(&dataLen));
+            }
+            dmxDev->updateFilterOutput(fid, tmpData);
+            dmxDev->startFilterHandler(fid);
+        }
+    }
 }
 
 Return<Result> Demux::setFrontendDataSource(uint32_t frontendId) {
@@ -77,8 +98,7 @@ Return<void> Demux::openFilter(const DemuxFilterType& type, uint32_t bufferSize,
                                const sp<IFilterCallback>& cb, openFilter_cb _hidl_cb) {
     ALOGV("%s", __FUNCTION__);
 
-    uint32_t filterId;
-    filterId = ++mLastUsedFilterId;
+    int filterId;
 
     if (cb == nullptr) {
         ALOGW("[Demux] callback can't be null");
@@ -86,13 +106,17 @@ Return<void> Demux::openFilter(const DemuxFilterType& type, uint32_t bufferSize,
         return Void();
     }
 
-    sp<Filter> filter = new Filter(type, filterId, bufferSize, cb, this);
+    AmDmxDevice->AM_DMX_Open();
+    AmDmxDevice->AM_DMX_AllocateFilter(&filterId);
+    sp<Filter> filter = new Filter(type, (uint32_t)filterId, bufferSize, cb, this);
 
     if (!filter->createFilterMQ()) {
         _hidl_cb(Result::UNKNOWN_ERROR, filter);
+        AmDmxDevice->AM_DMX_FreeFilter(filterId);
         return Void();
     }
 
+    AmDmxDevice->AM_DMX_SetCallback(filterId, this->postData, this);
     mFilters[filterId] = filter;
     if (filter->isPcrFilter()) {
         mPcrFilterIds.insert(filterId);
@@ -106,6 +130,7 @@ Return<void> Demux::openFilter(const DemuxFilterType& type, uint32_t bufferSize,
             result = mDvrPlayback->addPlaybackFilter(filterId, filter);
         }
     }
+
     _hidl_cb(result ? Result::SUCCESS : Result::INVALID_ARGUMENT, filter);
     return Void();
 }
@@ -182,6 +207,8 @@ Return<Result> Demux::close() {
     mRecordFilterIds.clear();
     mFilters.clear();
     mLastUsedFilterId = -1;
+    AmDmxDevice->AM_DMX_Close();
+    AmDmxDevice = NULL;
 
     return Result::SUCCESS;
 }
@@ -386,6 +413,10 @@ bool Demux::detachRecordFilter(int filterId) {
     mFilters[filterId]->detachFilterFromRecord();
 
     return true;
+}
+
+sp<AM_DMX_Device> Demux::getAmDmxDevice(void) {
+    return AmDmxDevice;
 }
 
 }  // namespace implementation

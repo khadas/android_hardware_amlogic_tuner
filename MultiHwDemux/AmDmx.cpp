@@ -21,11 +21,8 @@
 #include <AmLinuxDvb.h>
 #include <AmDmx.h>
 #include <dmx.h>
-#include <AmHwMultiDemuxWrapper.h>
 
-
-AM_DMX_Device::AM_DMX_Device(AmHwMultiDemuxWrapper* DemuxWrapper) :
-	mDemuxWrapper (DemuxWrapper) {
+AM_DMX_Device::AM_DMX_Device() {
     ALOGI("AM_DMX_Device\n");
     drv = new AmLinuxDvd;
     open_count = 0;
@@ -133,10 +130,10 @@ pthread_mutex_unlock(&dev->lock);
                         sec = sec_buf;
                     }
 
-                    if (cb) {
-                        //ALOGE("TEST: send callback size:%d", readsize);
-                        cb(dev->mDemuxWrapper, id, sec, readsize, data);
-                    }
+                    //if (cb) {
+                    //    //ALOGE("TEST: send callback size:%d", readsize);
+                    //    cb(dev->mDemuxWrapper, id, sec, readsize, data);
+                    //}
                     readsize = (reaminSize > buffSize) ? buffSize : reaminSize;
                 }
             }
@@ -186,9 +183,9 @@ static AM_ErrorCode_t read_dmx_sec_es_data(void *arg,
         sec = sec_buf;
     }
 
-    if (cb) {
-        cb(dev->mDemuxWrapper, id, sec, sec_len, data);
-    }
+    //if (cb) {
+    //    cb(dev->mDemuxWrapper, id, sec, sec_len, data);
+    //}
     return ret;
 }
 #endif
@@ -196,15 +193,8 @@ static AM_ErrorCode_t read_dmx_sec_es_data(void *arg,
 void* AM_DMX_Device::dmx_data_thread(void *arg) {
     ALOGI("--------->dmx_data_thread <--------------\n");
     AM_DMX_Device *dev = (AM_DMX_Device*)arg;
-    uint8_t *sec_buf;
-    //uint8_t *sec;
-    //int sec_len;
     AM_DMX_FilterMask_t mask = 0;
     AM_ErrorCode_t ret;
-
-    int BUF_SIZE = sizeof(dmx_sec_es_data) * 500;
-    int BUF_SIZE2 = 10*1024*1024;
-    sec_buf = (uint8_t*)malloc(BUF_SIZE2);
 
     while (dev->enable_thread) {
         AM_DMX_FILTER_MASK_CLEAR(&mask);
@@ -231,9 +221,9 @@ void* AM_DMX_Device::dmx_data_thread(void *arg) {
                     continue;
                 }
                 if (filter->flags & DMX_OUTPUT_RAW_MODE) {
-                    ret = read_dmx_sec_es_data(arg,id,filter,sec_buf,BUF_SIZE);
+                    if (filter->cb) filter->cb(filter->user_data ,id, true);
                 } else {
-                    ret = read_dmx_non_sec_es_data(arg,id,filter,sec_buf,BUF_SIZE2);
+                    if (filter->cb) filter->cb(filter->user_data, id, false);
                 }
             }
 #if defined(DMX_WAIT_CB) || defined(DMX_SYNC)
@@ -245,10 +235,6 @@ void* AM_DMX_Device::dmx_data_thread(void *arg) {
         } else {
             usleep(10000);
         }
-    }
-
-    if (sec_buf) {
-        free(sec_buf);
     }
 
     return NULL;
@@ -353,6 +339,23 @@ AM_ErrorCode_t AM_DMX_Device::AM_DMX_Close(void) {
         pthread_cond_destroy(&cond);
     }
     open_count--;
+
+    return ret;
+}
+
+AM_ErrorCode_t AM_DMX_Device::AM_DMX_Read(int fhandle, uint8_t* buff, int *size) {
+    AM_DMX_Filter *filter;
+    AM_ErrorCode_t ret = AM_SUCCESS;
+
+    ret = dmx_get_used_filter(fhandle, &filter);
+    if (ret != AM_SUCCESS) {
+        return AM_FAILURE;
+    }
+    if (!filter->enable || !filter->used) {
+        ret = AM_FAILURE;
+    } else {
+        ret  = drv->dvb_read(this, filter, buff, size);
+    }
 
     return ret;
 }

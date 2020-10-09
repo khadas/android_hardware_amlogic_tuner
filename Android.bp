@@ -24,7 +24,6 @@ cc_defaults {
         "utils/FileSystemIo.cpp",
         "MultiHwDemux/AmDmx.cpp",
         "MultiHwDemux/AmLinuxDvb.cpp",
-        "MultiHwDemux/AmHwMultiDemuxWrapper.cpp",
         "Filter.cpp",
         "Frontend.cpp",
         "Descrambler.cpp",

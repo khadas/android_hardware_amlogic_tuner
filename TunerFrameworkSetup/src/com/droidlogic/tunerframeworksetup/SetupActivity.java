@@ -85,10 +85,10 @@ public class SetupActivity extends Activity implements OnTuneEventListener, OnPl
     private Handler mUiHandler = null;
     private HandlerThread mHandlerThread = null;
     private Handler mTaskHandler = null;
-    private MediaCodecPlayer mMediaCodecPlayer = null;
+    private MediaCodecPlayer mMediaCodecPlayer = null;
     private AudioTrack mAudioTrack = null;
     private MediaCodec mMediaCodec = null;
-    
+
     private TunerExecutor mExecutor;
     private Filter mFilter = null;
     private DvrPlayback mDvrPlayback = null;
@@ -114,10 +114,10 @@ public class SetupActivity extends Activity implements OnTuneEventListener, OnPl
 
         DvrSettings dvrSettings = DvrSettings
         .builder()
-        .setDataFormat(DvrSettings.DATA_FORMAT_PES) 
-        .setLowThreshold(100) 
-        .setHighThreshold(900) 
-        .setPacketSize(188) 
+        .setDataFormat(DvrSettings.DATA_FORMAT_PES)
+        .setLowThreshold(100)
+        .setHighThreshold(900)
+        .setPacketSize(188)
         .build();
 
         mDvrPlayback.configure(dvrSettings);
@@ -347,16 +347,22 @@ public class SetupActivity extends Activity implements OnTuneEventListener, OnPl
 
     private void playStop() {
         Log.d(TAG, "playStop");
-        if (!mMediaCodecPlayer.isStarted()) {
-            Log.d(TAG, "playStop not started");
-            return;
+
+        if (mFilter != null) {
+            mFilter.stop();
+            mFilter.close();
+            mFilter = null;
         }
+        if (mTuner != null) {
+            mTuner.cancelTuning();
+        }
+
         if (mMediaCodecPlayer != null) {
             mMediaCodecPlayer.stopPlayer();
         }
         if (MediaCodecPlayer.PLAYER_MODE_TUNER.equals(mMediaCodecPlayer.getPlayerMode())) {
             //comment it when using tuner data
-            clearResource();
+            //clearResource();
         }
     }
 
@@ -396,7 +402,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, OnPl
                 Log.d(TAG, "finish open filter");
                  Settings settings = AvSettings
                 .builder(Filter.TYPE_TS, false)
-                .setPassthrough(true)
+                .setPassthrough(false)
                 .build();
 
                  FilterConfiguration config = TsFilterConfiguration
@@ -552,11 +558,11 @@ public class SetupActivity extends Activity implements OnTuneEventListener, OnPl
         /*public void execute(Runnable r) {
             r.run();
         }*/
-		public void execute(Runnable command) {
-			if (!mTaskHandler.post(command)) {
-				Log.d(TAG, "execute mTaskHandler is shutting down");
-			}
-		}
+        public void execute(Runnable command) {
+            if (!mTaskHandler.post(command)) {
+                Log.d(TAG, "execute mTaskHandler is shutting down");
+            }
+        }
     }
 
 }

@@ -26,7 +26,8 @@
 #include "Frontend.h"
 #include "TimeFilter.h"
 #include "Tuner.h"
-#include "AmHwMultiDemuxWrapper.h"
+//#include "AmHwMultiDemuxWrapper.h"
+#include "AmDmx.h"
 
 using namespace std;
 
@@ -54,7 +55,7 @@ class Frontend;
 class TimeFilter;
 class Tuner;
 
-class Demux : public IDemux, public DemuxDataNotify {
+class Demux : public IDemux {
   public:
     Demux(uint32_t demuxId, sp<Tuner> tuner);
 
@@ -80,7 +81,7 @@ class Demux : public IDemux, public DemuxDataNotify {
     virtual Return<Result> connectCiCam(uint32_t ciCamId) override;
 
     virtual Return<Result> disconnectCiCam() override;
-    virtual void postData(int fid,const uint8_t *data, int len);
+    static void postData(void* demux, int fid, bool passthrough);
 
     // Functions interacts with Tuner Service
     void stopFrontendInput();
@@ -104,6 +105,7 @@ class Demux : public IDemux, public DemuxDataNotify {
 
     void sendFrontendInputToRecord(vector<uint8_t> data);
     bool startRecordFilterDispatcher();
+    sp<AM_DMX_Device> getAmDmxDevice();
 
   private:
     // Tuner service
@@ -190,8 +192,7 @@ class Demux : public IDemux, public DemuxDataNotify {
     // TODO handle mulptiple Pes filters
     int mPesSizeLeft = 0;
     vector<uint8_t> mPesOutput;
-    std::shared_ptr<AmHwMultiDemuxWrapper> mDemuxWrap;
-
+    sp<AM_DMX_Device> AmDmxDevice;
     const bool DEBUG_DEMUX = false;
 };
 
