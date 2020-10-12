@@ -1,6 +1,8 @@
 package com.droidlogic.tunerframeworksetup;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.media.AudioTrack;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
@@ -14,6 +16,7 @@ import android.os.Bundle;
 //import android.media.tv.tuner.Tuner;
 import android.media.tv.tuner.Tuner;
 import android.media.tv.tuner.frontend.FrontendSettings;
+import android.media.tv.tuner.frontend.FrontendStatus;
 import android.media.tv.tuner.frontend.DvbtFrontendSettings;
 import android.media.tv.tuner.frontend.OnTuneEventListener;
 import android.media.tv.tuner.frontend.ScanCallback;
@@ -28,6 +31,8 @@ import android.media.tv.tuner.filter.Settings;
 import android.media.tv.tuner.filter.TsFilterConfiguration;
 import android.media.tv.tuner.filter.FilterConfiguration;
 import android.media.tv.tuner.filter.MediaEvent;
+import android.media.tv.tuner.filter.SectionSettingsWithTableInfo;
+import android.media.tv.tuner.filter.SectionEvent;
 import android.media.tv.tuner.dvr.OnPlaybackStatusChangedListener;
 import android.media.tv.tuner.dvr.DvrSettings;
 import android.media.tv.tuner.dvr.DvrPlayback;
@@ -62,7 +67,7 @@ import java.util.Set;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Executor;
 
-public class SetupActivity extends Activity implements OnTuneEventListener, OnPlaybackStatusChangedListener{
+public class SetupActivity extends Activity implements OnTuneEventListener, ScanCallback, OnPlaybackStatusChangedListener{
 
     private final static String TAG = SetupActivity.class.getSimpleName();
 
@@ -91,8 +96,14 @@ public class SetupActivity extends Activity implements OnTuneEventListener, OnPl
 
     private TunerExecutor mExecutor;
     private Filter mFilter = null;
+    private Filter sectionFilter = null;
     private DvrPlayback mDvrPlayback = null;
     private Tuner mTuner = null;
+    private ArrayList<ProgramInfo> programs = new ArrayList<ProgramInfo>();
+    private int[] videoStreamTypes = {0x01, 0x02, 0x1b, 0x24};
+    private int[] audioStreamTypes = {0x03, 0x04, 0x0e, 0x0f, 0x011, 0x81, 0x87};
+    private AlertDialog.Builder builder;
+    private ProgramInfo mCurrentProgram = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -275,6 +286,9 @@ public class SetupActivity extends Activity implements OnTuneEventListener, OnPl
     private final static int TASK_MSG_STOP_SEARCH = 2;
     private final static int TASK_MSG_START_PLAY = 3;
     private final static int TASK_MSG_STOP_PLAY = 4;
+    private final static int TASK_MSG_PULL_SECTION = 5;
+    private final static int TASK_MSG_STOP_SECTION = 6;
+    private final static int TASK_MSG_SHOW_CHNLIST = 7;
 
     private class TaskHandlerCallback implements Handler.Callback {
 
@@ -294,6 +308,16 @@ public class SetupActivity extends Activity implements OnTuneEventListener, OnPl
                 case TASK_MSG_STOP_PLAY:
                     playStop();
                     break;
+                case TASK_MSG_PULL_SECTION:
+                    startSectionFilter(message.arg1, message.arg2);
+                    break;
+                case TASK_MSG_STOP_SECTION:
+                    searchStop();
+                    mTaskHandler.sendEmptyMessageDelayed(TASK_MSG_SHOW_CHNLIST, 200);
+                    break;
+                case TASK_MSG_SHOW_CHNLIST:
+                    showChannelList();
+                    break;
                 default:
                     result = false;
                     break;
@@ -303,10 +327,28 @@ public class SetupActivity extends Activity implements OnTuneEventListener, OnPl
     }
 
     private void searchStart() {
+        FrontendSettings feSettings = DvbtFrontendSettings
+            .builder()
+            .setFrequency(Integer.parseInt(mFrequency.getText().toString())  * 1000000)
+            .setTransmissionMode(DvbtFrontendSettings.TRANSMISSION_MODE_UNDEFINED)
+            .setBandwidth(DvbtFrontendSettings.BANDWIDTH_UNDEFINED)
+            .setConstellation(DvbtFrontendSettings.CONSTELLATION_QPSK)
+            .setHierarchy(DvbtFrontendSettings.HIERARCHY_UNDEFINED)
+            .setHighPriorityCodeRate(DvbtFrontendSettings.CODERATE_UNDEFINED)
+            .setLowPriorityCodeRate(DvbtFrontendSettings.CODERATE_UNDEFINED)
+            .setGuardInterval(DvbtFrontendSettings.GUARD_INTERVAL_UNDEFINED)
+            .build();
+        mTuner.scan(feSettings, Tuner.SCAN_TYPE_AUTO, mExecutor, this);
         Log.d(TAG, "searchStart");
     }
 
     private void searchStop() {
+        if (sectionFilter != null) {
+            sectionFilter.stop();
+            sectionFilter.close();
+            sectionFilter = null;
+        }
+        mTuner.cancelScanning();
         Log.d(TAG, "searchStop");
     }
 
@@ -345,6 +387,13 @@ public class SetupActivity extends Activity implements OnTuneEventListener, OnPl
         Log.d(TAG, "111playStart");
     }
 
+    private void playProgram(ProgramInfo program) {
+        if (program == null)
+            return;
+        mCurrentProgram = program;
+        playStart();
+    }
+
     private void playStop() {
         Log.d(TAG, "playStop");
 
@@ -352,6 +401,11 @@ public class SetupActivity extends Activity implements OnTuneEventListener, OnPl
             mFilter.stop();
             mFilter.close();
             mFilter = null;
+        }
+        if (sectionFilter != null) {
+            sectionFilter.stop();
+            sectionFilter.close();
+            sectionFilter = null;
         }
         if (mTuner != null) {
             mTuner.cancelTuning();
@@ -381,6 +435,12 @@ public class SetupActivity extends Activity implements OnTuneEventListener, OnPl
                         mLinearInputBlock.block = mediaEvent.getLinearBlock();
                         mMediaCodecPlayer.WriteTunerInputData(mLinearInputBlock, 0, 0, (int)mediaEvent.getDataLength());
                     }
+                } else if (event instanceof SectionEvent) {
+                    SectionEvent sectionEvent = (SectionEvent) event;
+                    Log.d(TAG, "receive section data, size=" + sectionEvent.getDataLength());
+                    byte[] data = new byte[1024];
+                    filter.read(data, 0, sectionEvent.getDataLength());
+                    parseSectionData(data);
                 }
             }
         }
@@ -391,9 +451,150 @@ public class SetupActivity extends Activity implements OnTuneEventListener, OnPl
         }
     };
 
+    private void parseSectionData(byte[] data) {
+        int tableId = data[0];
+        if (tableId == 0) {
+            //parse pat
+            if (!programs.isEmpty()) {
+                return;
+            }
+            int sectionLen = ((((int)(data[1]))&0x03 << 8) & 0xff) + (((int)data[2]) & 0xff);
+            for (int i =8; i< sectionLen + 3/*befor section number index*/ -4/*crc lenth*/; i += 4) {
+                ProgramInfo program = new ProgramInfo();
+                program.freq = Integer.parseInt(mFrequency.getText().toString());
+                program.programId = ((((int)(data[i])) & 0x00ff) << 8) + (((int)(data[i + 1])) & 0xff);
+                program.pmtId = ((((int)(data[i + 2])) & 0x001f) << 8) + (((int)(data[i +3 ])) & 0xff);
+                program.videoPid = 0;
+                program.audioPid = 0;
+                program.ready = false;
+                programs.add(program);
+                Log.d(TAG, "add program promgramid= " + program.programId + ", pmtid= " + program.pmtId);
+            }
+            Message msg = mTaskHandler.obtainMessage(TASK_MSG_PULL_SECTION);
+            msg.arg1 = programs.get(0).pmtId;
+            msg.arg2 = 2;
+            mTaskHandler.sendMessage(msg);
+        } else if (tableId == 2) {
+            //parse pmt
+            int sectionLen = ((((int)(data[1]))&0x0003) << 8) + (((int)data[2]) & 0xff);
+            int programId = ((((int)(data[3])) & 0x00ff) << 8) + (((int)data[4]) & 0xff);
+            ProgramInfo program = null;
+            for (ProgramInfo pg : programs) {
+                if (pg.programId == programId) {
+                    program = pg;
+                    break;
+                }
+            }
+            if (program == null) {
+                return;
+            } else {
+                if (program.ready) {
+                    //Log.d(TAG, "program: " + programId + " has been parsed, skip.");
+                    return;
+                }
+            }
+            for (int i = 10; i < sectionLen + 3/*befor section number index*/ -4/*crc lenth*/;) {
+                int type = ((int)data[i+2]) & 0xff;
+                boolean isVideo = false;
+                boolean isAudio = false;
+                for (int j : videoStreamTypes) {
+                    if (j == type) {
+                        isVideo = true;
+                        isAudio = false;
+                        break;
+                    }
+                }
+                for (int x : audioStreamTypes) {
+                    if (x == type) {
+                        isVideo = false;
+                        isAudio = true;
+                        break;
+                    }
+                }
+                if (isVideo) {
+                    program.videoPid = ((((int)(data[i + 3])) & 0x001f) << 8) + (((int)(data[i + 4])) & 0xff);
+                } else if (isAudio) {
+                    if (program.audioPid == 0) {
+                        program.audioPid = ((((int)(data[i + 3])) & 0x001f) << 8) + (((int)(data[i + 4])) & 0xff);
+                    }
+                }
+                program.ready = true;
+                int esLenth = ((((int)(data[i + 5])) & 0x000f) << 8) + (((int)(data[i+6])) & 0xff);
+                i = i + 5 + esLenth;
+            }
+            ProgramInfo unInitProg = null;
+            for (ProgramInfo pg : programs) {
+                if (pg.ready == false ) {
+                    unInitProg = pg;
+                    break;
+                } else {
+                    Log.d(TAG, "Find program: id= " + pg.programId + ", videoPid= " + pg.videoPid + ", audioPid= " + pg.audioPid + ", pmtPid= " + pg.pmtId);
+                }
+            }
+            if (unInitProg == null) {
+                Log.d(TAG, "Find all programs, stop pmt filter");
+                mTaskHandler.sendEmptyMessage(TASK_MSG_STOP_SECTION);
+            } else {
+                Log.d(TAG, "Start to parse next program");
+                Message msg = mTaskHandler.obtainMessage(TASK_MSG_PULL_SECTION);
+                msg.arg1 = unInitProg.pmtId;
+                msg.arg2 = 2;
+                mTaskHandler.sendMessage(msg);
+            }
+        }
+    }
+
+    private void startSectionFilter(int pid, int tid) {
+        if (mTuner == null) {
+            return;
+        }
+        if (sectionFilter != null) {
+            sectionFilter.stop();
+            sectionFilter.close();
+            sectionFilter = null;
+        }
+        sectionFilter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_SECTION,  32 * 1024, mExecutor, mfilterCallback);
+        Settings settings = SectionSettingsWithTableInfo
+        .builder(Filter.TYPE_TS)
+        .setTableId(tid)
+        .setCrcEnabled(true)
+        .setRaw(false)
+        .setRepeat(false)
+        .build();
+        FilterConfiguration config = TsFilterConfiguration
+        .builder()
+        .setTpid(pid)
+        .setSettings(settings)
+        .build();
+        sectionFilter.configure(config);
+        sectionFilter.start();
+        Log.d(TAG, "section filter(" + pid + ") start");
+    }
+
+    public void showChannelList() {
+        ArrayList<String> progStrs = new ArrayList<String>();
+        for (ProgramInfo prg: programs) {
+            progStrs.add("" + prg.programId + ": vid[" + prg.videoPid + "] aid[" + prg.audioPid + "]");
+        }
+        String[] items = (String[])progStrs.toArray(new String[progStrs.size()]);
+        builder = new AlertDialog.Builder(this).setIcon(R.mipmap.ic_launcher)
+                  .setTitle("Channels")
+                  .setItems(items, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialogInterface, int i) {
+                        playProgram(programs.get(i));
+                    }
+                });
+        builder.create().show();
+    }
+
     public void onTuneEvent(int tuneEvent) {
         Log.d(TAG, "getTune Event: " + tuneEvent);
         mUiHandler.sendMessage(mUiHandler.obtainMessage(UI_MSG_STATUS, "Got lock event: " + tuneEvent));
+        int pid = Integer.parseInt(mVideoPid.getText().toString());
+        if (mCurrentProgram != null && mCurrentProgram.videoPid != 0) {
+            pid = mCurrentProgram.videoPid;
+        }
         if (tuneEvent == 0) {
             Log.d(TAG, "tuner status is lock");
             if (mTuner != null) {
@@ -565,4 +766,70 @@ public class SetupActivity extends Activity implements OnTuneEventListener, OnPl
         }
     }
 
+    @Override
+    public void onLocked() {
+        Log.d(TAG, "scan locked, try to build psi");
+        mUiHandler.sendMessage(mUiHandler.obtainMessage(UI_MSG_STATUS, "scan locked"));
+        Message msg = mTaskHandler.obtainMessage(TASK_MSG_PULL_SECTION);
+        msg.arg1 = 0;
+        msg.arg2 = 0;
+        mTaskHandler.sendMessage(msg);
+    }
+    @Override
+    public void onScanStopped() {
+    }
+    @Override
+    public void onProgress(int percent) {
+    }
+    @Override
+    public void onFrequenciesReported(int[] frequency) {
+        if (mTuner != null) {
+            if (!mTuner.getFrontendStatus(new int[]{FrontendStatus.FRONTEND_STATUS_TYPE_RF_LOCK}).isRfLocked()) {
+                Log.d(TAG, "unlock, should stop");
+                searchStop();
+            } else {
+                Log.d(TAG, "locked, waiting to build psi.");
+            }
+        }
+    }
+    @Override
+    public void onSymbolRatesReported(int[] rate) {
+    }
+    @Override
+    public void onPlpIdsReported(int[] plpIds) {
+    }
+    @Override
+    public void onGroupIdsReported(int[] groupIds) {
+    }
+    @Override
+    public void onInputStreamIdsReported(int[] inputStreamIds) {
+    }
+    @Override
+    public void onDvbsStandardReported(int dvbsStandard) {
+    }
+    @Override
+    public void onDvbtStandardReported(int dvbtStandard) {
+    }
+    @Override
+    public void onAnalogSifStandardReported(int sif) {
+    }
+    @Override
+    public void onAtsc3PlpInfosReported(Atsc3PlpInfo[] atsc3PlpInfos) {
+    }
+    @Override
+    public void onHierarchyReported(int hierarchy) {
+    }
+    @Override
+    public void onSignalTypeReported(int signalType) {
+    }
+
+    public class ProgramInfo {
+        public int freq;
+        public int programId;
+        public int pmtId;
+        public String name;
+        public int videoPid;
+        public int audioPid;
+        public boolean ready;
+    }
 }

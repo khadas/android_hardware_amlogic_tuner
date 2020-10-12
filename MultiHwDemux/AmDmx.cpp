@@ -220,11 +220,10 @@ void* AM_DMX_Device::dmx_data_thread(void *arg) {
                 if (!AM_DMX_FILTER_MASK_ISSET(&mask, id) || !filter->enable || !filter->used) {
                     continue;
                 }
-                if (filter->flags & DMX_OUTPUT_RAW_MODE) {
-                    if (filter->cb) filter->cb(filter->user_data ,id, true);
-                } else {
-                    if (filter->cb) filter->cb(filter->user_data, id, false);
-                }
+                if (filter->cb) filter->cb(filter->user_data,
+                                           id,
+                                           filter->flags & DMX_ES_OUTPUT,
+                                           filter->flags & DMX_OUTPUT_RAW_MODE);
             }
 #if defined(DMX_WAIT_CB) || defined(DMX_SYNC)
             pthread_mutex_lock(&dev->lock);

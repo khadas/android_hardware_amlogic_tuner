@@ -81,7 +81,7 @@ class Demux : public IDemux {
     virtual Return<Result> connectCiCam(uint32_t ciCamId) override;
 
     virtual Return<Result> disconnectCiCam() override;
-    static void postData(void* demux, int fid, bool passthrough);
+    static void postData(void* demux, int fid, bool esOutput, bool passthrough);
 
     // Functions interacts with Tuner Service
     void stopFrontendInput();

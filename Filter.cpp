@@ -566,6 +566,10 @@ Result Filter::startMediaFilterHandler() {
            .dataLength = static_cast<uint32_t>(mFilterOutput.size()),
            .avDataId = dataId,
     };
+    if (mType.subType.tsFilterType() == DemuxTsFilterType::AUDIO) {
+        AudioExtraMetaData audio;
+        mediaEvent.extraMetaData.audio(audio);
+    }
     int size = mFilterEvent.events.size();
     mFilterEvent.events.resize(size + 1);
     mFilterEvent.events[size].media(mediaEvent);

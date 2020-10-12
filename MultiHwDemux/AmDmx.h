@@ -78,7 +78,7 @@ typedef uint32_t AM_DMX_FilterMask_t;
 
 class AmHwMultiDemuxWrapper;
 
-typedef void (*AM_DMX_DataCb) (void* device, int fhandle, bool passthrough);
+typedef void (*AM_DMX_DataCb) (void* device, int fhandle, bool esOutput, bool passthrough);
 
 struct AM_DMX_Filter {
     void *drv_data; /**< 驱动私有数据*/

@@ -261,7 +261,7 @@ int FrontendDevice::stopTune() {
 
 int FrontendDevice::stopScan() {
     stop();
-    mContext->sendScanCallBack(mDev.tuneFreq, false, true);
+    //mContext->sendScanCallBack(mDev.tuneFreq, false, true);
     return 0;
 }
 

@@ -253,7 +253,7 @@ AM_ErrorCode_t AmLinuxDvd::dvb_read(AM_DMX_Device *dev, AM_DMX_Filter *filter, u
     }
     ret = read(fd, buf, len);
 
-    if (ret <= 0) {
+    if (ret < 0) {
         if (errno == ETIMEDOUT) {
             return AM_DMX_ERR_TIMEOUT;
         }

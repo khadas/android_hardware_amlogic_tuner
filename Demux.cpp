@@ -37,39 +37,53 @@ Demux::Demux(uint32_t demuxId, sp<Tuner> tuner) {
 
 Demux::~Demux() {}
 
-void Demux::postData(void* demux, int fid, bool passthrough) {
+void Demux::postData(void* demux, int fid, bool esOutput, bool passthrough) {
     ALOGV("[Demux] received data from fid =%d", fid);
     vector<uint8_t> tmpData;
     Demux *dmxDev = (Demux*)demux;
 
-    if (passthrough) {
-        int size = sizeof(dmx_sec_es_data)*500;
+    if (esOutput) {
+        if (passthrough) {
+            int size = sizeof(dmx_sec_es_data)*500;
+            tmpData.resize(size);
+            int readRet = dmxDev->getAmDmxDevice()
+                          ->AM_DMX_Read(fid, tmpData.data(), &size);
+            if (readRet != 0) {
+                return;
+            } else {
+                dmxDev->updateFilterOutput(fid, tmpData);
+                dmxDev->startFilterHandler(fid);
+            }
+        } else {
+            int headerLen = sizeof(dmx_non_sec_es_header);
+            tmpData.resize(headerLen);
+            int readRet = dmxDev->getAmDmxDevice()
+                          ->AM_DMX_Read(fid, tmpData.data(), &headerLen);
+            if (readRet != 0) {
+                return;
+            } else {
+                dmx_non_sec_es_header* esHeader = (dmx_non_sec_es_header*)(tmpData.data());
+                uint32_t dataLen = esHeader->len;
+                //tmpData.resize(headerLen + dataLen);
+                tmpData.resize(dataLen);
+                readRet = 1;
+                while (readRet) {
+                    readRet = dmxDev->getAmDmxDevice()
+                          ->AM_DMX_Read(fid, tmpData.data()/* + headerLen*/, (int*)(&dataLen));
+                }
+                dmxDev->updateFilterOutput(fid, tmpData);
+                dmxDev->startFilterHandler(fid);
+            }
+        }
+    } else {
+        int size = 1024;
         tmpData.resize(size);
         int readRet = dmxDev->getAmDmxDevice()
                       ->AM_DMX_Read(fid, tmpData.data(), &size);
         if (readRet != 0) {
             return;
         } else {
-            dmxDev->updateFilterOutput(fid, tmpData);
-            dmxDev->startFilterHandler(fid);
-        }
-    } else {
-        int headerLen = sizeof(dmx_non_sec_es_header);
-        tmpData.resize(headerLen);
-        int readRet = dmxDev->getAmDmxDevice()
-                      ->AM_DMX_Read(fid, tmpData.data(), &headerLen);
-        if (readRet != 0) {
-            return;
-        } else {
-            dmx_non_sec_es_header* esHeader = (dmx_non_sec_es_header*)(tmpData.data());
-            uint32_t dataLen = esHeader->len;
-            //tmpData.resize(headerLen + dataLen);
-            tmpData.resize(dataLen);
-            readRet = 1;
-            while (readRet) {
-                readRet = dmxDev->getAmDmxDevice()
-                      ->AM_DMX_Read(fid, tmpData.data()/* + headerLen*/, (int*)(&dataLen));
-            }
+            tmpData.resize(size);
             dmxDev->updateFilterOutput(fid, tmpData);
             dmxDev->startFilterHandler(fid);
         }
