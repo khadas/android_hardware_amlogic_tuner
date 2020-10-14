@@ -28,6 +28,12 @@ public class MediaCodecPlayer {
     public static final String TEST_MIME_TYPE = MediaFormat.MIMETYPE_VIDEO_AVC;//264
     private static final int APP_BUFFER_SIZE = 2 * 1024 * 1024;  // 1 MB
 
+    //audio
+    public static final String AUDIO_MIME_TYPE = MediaFormat.MIMETYPE_AUDIO_AAC;
+    public static final int AUDIO_SAMPLE_RATE = 48000;
+    public static final int AUDIO_AAC_PROFILE = 2; /* OMX_AUDIO_AACObjectLC */
+    public static final int AUDIO_CHANNEL_COUNT = 2; // mono
+    public static final int AUDIO_BIT_RATE = 128000;
     //play mode
     public static final String PLAYER_MODE_LOCAL = "local";
     public static final String PLAYER_MODE_TUNER = "tuner";
@@ -39,10 +45,13 @@ public class MediaCodecPlayer {
     private Surface mSurface = null;
     private boolean mStarted = false;
     private boolean mStopping = false;
-    private MediaCodecCallback mMediaCodecCallback = null;
+    private MediaCodecCallback mVideoMediaCodecCallback = null;
+    private AudioMediaCodecCallback mAudioMediaCodecCallback = null;
     private LinearInputBlock mLinearInputBlock = null;
     private MediaCodec mMediaCodec = null;
+    private MediaCodec mAudioMediaCodec = null;
     private MediaFormat mMediaFormat = null;
+    private MediaFormat mAudioMediaFormat = null;
     private MediaExtractor mMediaExtractor = null;
     private LocalMediaCodecRunnable mLocalMediaCodecRunnable = null;
     private MediaCodecPlayerStatus mMediaCodecPlayerStatus = null;
@@ -91,8 +100,12 @@ public class MediaCodecPlayer {
         mOutputSlotListener = ouputSlotListener;
     }
 
-    public void setMediaFormat(MediaFormat mediaFormat) {
+    public void setVideoMediaFormat(MediaFormat mediaFormat) {
         mMediaFormat = mediaFormat;
+    }
+
+    public void setAudioMediaFormat(MediaFormat mediaFormat) {
+        mAudioMediaFormat = mediaFormat;
     }
 
     public void startPlayer() {
@@ -192,9 +205,9 @@ public class MediaCodecPlayer {
         return result;
     }
 
-    public boolean WriteTunerInputData(SetupActivity.LinearInputBlock1 linearBlock, long timestampUs, int offset, int length) {
+    public boolean WriteTunerInputVideoData(SetupActivity.LinearInputBlock1 linearBlock, long timestampUs, int offset, int length) {
         boolean result = true;
-        Log.d(TAG, "WriteInputData... ...");
+        Log.d(TAG, "WriteTunerInputVideoData... ...");
         SlotEvent event = null;
         try {
             event = mBufferQueue.take();
@@ -212,19 +225,39 @@ public class MediaCodecPlayer {
         return result;
     }
 
+    public boolean WriteTunerInputAudioData(SetupActivity.LinearInputBlock1 linearBlock, long timestampUs, int offset, int length) {
+        boolean result = true;
+        Log.d(TAG, "WriteTunerInputAudioData... ...");
+        SlotEvent event = null;
+        try {
+            event = mAudioBufferQueue.take();
+        } catch (InterruptedException e) {
+            Log.d(TAG, "WriteTunerInputAudioData mAudioBufferQueue.take InterruptedException = " + e.getMessage());
+            result = false;
+        }
+        if (event != null) {
+            if (event.input) {
+                mInputSlotListener.onInputSlot(mAudioMediaCodec, event.index, timestampUs, offset, length,  null, linearBlock);
+            } else {
+                result = mOutputSlotListener.onOutputSlot(mAudioMediaCodec, event.index);
+            }
+        }
+        return result;
+    }
+
     public void startLocalPlayer() {
         if (mStarted) {
             Log.d(TAG, "startLocalPlayer started already");
             return;
         }
         mStarted = true;
-        if (mMediaCodecCallback == null) {
-            mMediaCodecCallback = new MediaCodecCallback();
+        if (mVideoMediaCodecCallback == null) {
+            mVideoMediaCodecCallback = new MediaCodecCallback();
         }
         if (initLocalMediaExtractor() && initLocalMediaCodec(true)) {
             Log.d(TAG, "initPlayer inited");
             initLocalLinearBlock();
-            startMediaCodec();
+            startVideoMediaCodec();
             startFeedData();
         }
     }
@@ -279,14 +312,19 @@ public class MediaCodecPlayer {
             return;
         }
         mStarted = true;
-        if (mMediaCodecCallback == null) {
-            mMediaCodecCallback = new MediaCodecCallback();
+        if (mVideoMediaCodecCallback == null) {
+            mVideoMediaCodecCallback = new MediaCodecCallback();
         }
-        setMediaFormat(mMediaFormat);
-        if (initTunerMediaCodec(true)) {
+
+        if (mAudioMediaCodecCallback == null) {
+            mAudioMediaCodecCallback = new AudioMediaCodecCallback();
+        }
+        //setMediaFormat(mMediaFormat);
+        if (initTunerVideoMediaCodec(true) && initTunerAudioMediaCodec(true)) {
             startFixedTunerInAndOutListener();
             initTunerLinearBlock();
-            startMediaCodec();
+            startAudioMediaCodec();
+            startVideoMediaCodec();
         }
     }
 
@@ -329,6 +367,37 @@ public class MediaCodecPlayer {
 
     public interface MediaCodecPlayerStatus {
         void onMediaCodecPlayerStatus(JSONObject status);
+    }
+
+    private LinkedBlockingQueue<SlotEvent> mAudioBufferQueue = new LinkedBlockingQueue<SlotEvent>();
+    private class AudioMediaCodecCallback extends MediaCodec.Callback {
+        @Override
+        public void onInputBufferAvailable(MediaCodec codec, int index) {
+            Log.d(TAG, "audio onInputBufferAvailable index = " + index);
+            if (!mStopping && mStarted) {
+                mAudioBufferQueue.offer(new SlotEvent(true, index));
+            }
+        }
+
+        @Override
+        public void onOutputBufferAvailable(
+                MediaCodec codec, int index, MediaCodec.BufferInfo info) {
+            Log.d(TAG, "audio onOutputBufferAvailable = " + index);
+            //mBufferQueue.offer(new SlotEvent(false, index));
+            if (!mStopping && mStarted) {
+                codec.releaseOutputBuffer(index, true);
+            }
+        }
+
+        @Override
+        public void onOutputFormatChanged(MediaCodec codec, MediaFormat format) {
+            Log.d(TAG, "onOutputFormatChanged = " + format);
+        }
+
+        @Override
+        public void onError(MediaCodec codec, MediaCodec.CodecException e) {
+            Log.d(TAG, "onOutputFormatChanged = " + e.getMessage());
+        }
     }
 
     private LinkedBlockingQueue<SlotEvent> mBufferQueue = new LinkedBlockingQueue<SlotEvent>();
@@ -450,27 +519,47 @@ public class MediaCodecPlayer {
         return result;
     }
 
-    private boolean initTunerMediaCodec(boolean isGoogle) {
-        Log.d(TAG, "initLocalMediaCodec isGoogle = " + isGoogle);
+    private boolean initTunerVideoMediaCodec(boolean isGoogle) {
+        Log.d(TAG, "initTunerVideoMediaCodec isGoogle = " + isGoogle);
         boolean result = true;
+        //video
         String[] codecs = getCodecNames(true, mMediaFormat);
         if (codecs != null && codecs.length > 0) {
             try {
-                Log.d(TAG, "initTunerMediaCodec codecs[0] = " + codecs[0]);
+                Log.d(TAG, "initTunerVideoMediaCodec codecs[0] = " + codecs[0]);
                 mMediaCodec = MediaCodec.createByCodecName(codecs[0]);
             } catch (Exception e) {
-                Log.d(TAG, "initTunerMediaCodec createByCodecName Exception = " + e.getMessage());
+                Log.d(TAG, "initTunerVideoMediaCodec video createByCodecName Exception = " + e.getMessage());
                 result = false;
             }
         } else {
-            Log.d(TAG, "initTunerMediaCodec No decoder found for format= " + mMediaFormat);
+            Log.d(TAG, "initTunerVideoMediaCodec No video decoder found for format= " + mMediaFormat);
             result = false;
         }
         return result;
     }
 
+    private boolean initTunerAudioMediaCodec(boolean isGoogle) {
+        //audio
+        boolean result = true;
+        String[] audioCodecs = getCodecNames(true, mAudioMediaFormat);
+        if (audioCodecs != null && audioCodecs.length > 0) {
+            try {
+                Log.d(TAG, "initTunerMediaCodec audioCodecs[0] = " + audioCodecs[0]);
+                mAudioMediaCodec = MediaCodec.createByCodecName(audioCodecs[0]);
+            } catch (Exception e) {
+                Log.d(TAG, "initTunerMediaCodec audio createByCodecName Exception = " + e.getMessage());
+                result = false;
+            }
+        } else {
+                Log.d(TAG, "initTunerMediaCodec No audio decoder found for format= " + mAudioMediaFormat);
+                result = false;
+        }
+        return result;
+    }
+
     private void initLocalLinearBlock() {
-        mMediaCodec.setCallback(mMediaCodecCallback);
+        mMediaCodec.setCallback(mVideoMediaCodecCallback);
         String[] codecNames = new String[]{ mMediaCodec.getName() };
         if (!mMediaCodec.getCodecInfo().isVendor() && mMediaCodec.getName().startsWith("c2.")) {
             assertTrue("Google default c2.* codecs are copy-free compatible with LinearBlocks",
@@ -485,7 +574,8 @@ public class MediaCodecPlayer {
     }
 
     private void initTunerLinearBlock() {
-        mMediaCodec.setCallback(mMediaCodecCallback);
+        mMediaCodec.setCallback(mVideoMediaCodecCallback);
+        mAudioMediaCodec.setCallback(mAudioMediaCodecCallback);
         String[] codecNames = new String[]{ mMediaCodec.getName() };
         if (!mMediaCodec.getCodecInfo().isVendor() && mMediaCodec.getName().startsWith("c2.")) {
             assertTrue("Google default c2.* codecs are copy-free compatible with LinearBlocks",
@@ -494,11 +584,19 @@ public class MediaCodecPlayer {
         mLinearInputBlock = new LinearInputBlock();
     }
 
-    private void startMediaCodec() {
+    private void startVideoMediaCodec() {
         Log.d(TAG, "startMediaCodec mMediaFormat = " + mMediaFormat);
         //mMediaFormat = MediaFormat.createVideoFormat(MediaCodecPlayer.TEST_MIME_TYPE, 720, 576);
         mMediaCodec.configure(mMediaFormat, mSurface, null, MediaCodec.CONFIGURE_FLAG_USE_BLOCK_MODEL);
         mMediaCodec.start();
+    }
+
+    private void startAudioMediaCodec() {
+        //mAudioMediaFormat.setInteger(MediaFormat.KEY_AAC_PROFILE, AUDIO_AAC_PROFILE);
+        //mAudioMediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, AUDIO_BIT_RATE);
+        Log.d(TAG, "startMediaCodec mAudioMediaFormat = " + mAudioMediaFormat);
+        mAudioMediaCodec.configure(mAudioMediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_USE_BLOCK_MODEL);
+        mAudioMediaCodec.start();
     }
 
     private String[] getCodecNames(boolean isGoog, MediaFormat... formats) {

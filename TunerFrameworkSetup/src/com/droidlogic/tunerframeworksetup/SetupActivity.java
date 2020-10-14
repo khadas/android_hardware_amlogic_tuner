@@ -97,6 +97,8 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private TunerExecutor mExecutor;
     private Filter mFilter = null;
     private Filter sectionFilter = null;
+    private Filter mVideoFilter = null;
+    private Filter mAudioFilter = null;
     private DvrPlayback mDvrPlayback = null;
     private Tuner mTuner = null;
     private ArrayList<ProgramInfo> programs = new ArrayList<ProgramInfo>();
@@ -364,7 +366,8 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         }
 
         if (MediaCodecPlayer.PLAYER_MODE_TUNER.equals(mMediaCodecPlayer.getPlayerMode())) {
-            mMediaCodecPlayer.setMediaFormat(MediaFormat.createVideoFormat(MediaCodecPlayer.TEST_MIME_TYPE, 720, 576));
+            mMediaCodecPlayer.setVideoMediaFormat(MediaFormat.createVideoFormat(MediaCodecPlayer.TEST_MIME_TYPE, 720, 576));
+            mMediaCodecPlayer.setAudioMediaFormat(MediaFormat.createAudioFormat(MediaCodecPlayer.AUDIO_MIME_TYPE, MediaCodecPlayer.AUDIO_SAMPLE_RATE, MediaCodecPlayer.AUDIO_CHANNEL_COUNT));
             //please use tuner data to mMediaCodecPlayer.WriteInputData(mBlocks, timestampUs, 0, written);
            // if (initSource()) {
             //    sendData();
@@ -397,10 +400,16 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private void playStop() {
         Log.d(TAG, "playStop");
 
-        if (mFilter != null) {
-            mFilter.stop();
-            mFilter.close();
-            mFilter = null;
+        if (mVideoFilter != null) {
+            mVideoFilter.stop();
+            mVideoFilter.close();
+            mVideoFilter = null;
+        }
+
+        if (mAudioFilter != null) {
+            mAudioFilter.stop();
+            mAudioFilter.close();
+            mAudioFilter = null;
         }
         if (sectionFilter != null) {
             sectionFilter.stop();
@@ -428,12 +437,16 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
             for (FilterEvent event: events) {
                 if (event instanceof MediaEvent) {
                     MediaEvent mediaEvent = (MediaEvent) event;
-                    Log.d(TAG, "111MediaEvent length =" +  mediaEvent.getDataLength());
+                    Log.d(TAG, "MediaEvent length =" +  mediaEvent.getDataLength() + "MediaEvent audio =" + mediaEvent.getExtraMetaData());
                     if (mMediaCodecPlayer != null) {
                         if (mLinearInputBlock == null)
                             mLinearInputBlock = new LinearInputBlock1();
                         mLinearInputBlock.block = mediaEvent.getLinearBlock();
-                        mMediaCodecPlayer.WriteTunerInputData(mLinearInputBlock, 0, 0, (int)mediaEvent.getDataLength());
+                        if (mediaEvent.getExtraMetaData() != null) {
+                            mMediaCodecPlayer.WriteTunerInputAudioData(mLinearInputBlock, 0, 0, (int)mediaEvent.getDataLength());
+                        } else {
+                            mMediaCodecPlayer.WriteTunerInputVideoData(mLinearInputBlock, 0, 0, (int)mediaEvent.getDataLength());
+                        }
                     }
                 } else if (event instanceof SectionEvent) {
                     SectionEvent sectionEvent = (SectionEvent) event;
@@ -588,34 +601,57 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         builder.create().show();
     }
 
+    private Filter openVideoFilter(int pid) {
+         Filter filter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_VIDEO,  1024 * 1024, mExecutor, mfilterCallback);
+         Settings videoSettings = AvSettings
+        .builder(Filter.TYPE_TS, false)
+        .setPassthrough(false)
+        .build();
+
+         FilterConfiguration videoConfig = TsFilterConfiguration
+        .builder()
+        .setTpid(pid)
+        .setSettings(videoSettings)
+        .build();
+         filter.configure(videoConfig);
+         filter.start();
+         return filter;
+    }
+
+    private Filter openAudioFilter(int pid) {
+        Filter filter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_AUDIO,  1024 * 1024, mExecutor, mfilterCallback);
+         Settings audioSettings = AvSettings
+        .builder(Filter.TYPE_TS, true)
+        .setPassthrough(false)
+        .build();
+
+         FilterConfiguration audioConfig = TsFilterConfiguration
+        .builder()
+        .setTpid(pid)
+        .setSettings(audioSettings)
+        .build();
+         filter.configure(audioConfig);
+         filter.start();
+         return filter;
+    }
+
     public void onTuneEvent(int tuneEvent) {
         Log.d(TAG, "getTune Event: " + tuneEvent);
         mUiHandler.sendMessage(mUiHandler.obtainMessage(UI_MSG_STATUS, "Got lock event: " + tuneEvent));
-        int pid = Integer.parseInt(mVideoPid.getText().toString());
+        int vpid = Integer.parseInt(mVideoPid.getText().toString());
+        int apid = Integer.parseInt(mAudioPid.getText().toString());
         if (mCurrentProgram != null && mCurrentProgram.videoPid != 0) {
-            pid = mCurrentProgram.videoPid;
+            vpid= mCurrentProgram.videoPid;
+        }
+
+        if (mCurrentProgram != null && mCurrentProgram.audioPid != 0) {
+            apid= mCurrentProgram.audioPid;
         }
         if (tuneEvent == 0) {
             Log.d(TAG, "tuner status is lock");
             if (mTuner != null) {
-                Log.d(TAG, "start open filter");
-                mFilter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_VIDEO,  1024 * 1024, mExecutor, mfilterCallback);
-                Log.d(TAG, "finish open filter");
-                 Settings settings = AvSettings
-                .builder(Filter.TYPE_TS, false)
-                .setPassthrough(false)
-                .build();
-
-                 FilterConfiguration config = TsFilterConfiguration
-                .builder()
-                .setTpid(Integer.parseInt(mVideoPid.getText().toString()))
-                .setSettings(settings)
-                .build();
-                Log.d(TAG, "filter configure start ");
-                 mFilter.configure(config);
-                 mFilter.start();
-                 Log.d(TAG, "filter configure finish ");
-
+                mVideoFilter = openVideoFilter(vpid);
+                mAudioFilter = openAudioFilter(apid);
             }
         } else if (tuneEvent == 2) {
             Log.d(TAG, "tuner lock time out");
@@ -679,7 +715,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                         playStop();
                         break;
                     } else {
-                        mMediaCodecPlayer.WriteTunerInputData(mLinearInputBlock, timestampUs, 0, written);
+                        mMediaCodecPlayer.WriteTunerInputVideoData(mLinearInputBlock, timestampUs, 0, written);
                     }
                     try {
                         Thread.sleep(20);
