@@ -37,6 +37,29 @@ Demux::Demux(uint32_t demuxId, sp<Tuner> tuner) {
 
 Demux::~Demux() {}
 
+void Demux::postDvrData(void* demux) {
+    Demux *dmxDev = (Demux*)demux;
+    int cnt = -1;
+    vector<uint8_t> dvrData;
+    int size = 256 * 1024;
+    dvrData.resize(size);
+    cnt = size;
+    int ret = dmxDev->getAmDmxDevice()->AM_DVR_Read(dvrData.data(), &cnt);
+    if (ret <= 0) {
+        ALOGE("No data available from DVR");
+        usleep(200*1000);
+        return;
+    }
+
+    if (cnt > size)
+    {
+        ALOGE("return size:0x%0x bigger than 0x%0x input buf\n",cnt, size);
+        return;
+    }
+    dmxDev->sendFrontendInputToRecord(dvrData);
+    dmxDev->startRecordFilterDispatcher();
+}
+
 void Demux::postData(void* demux, int fid, bool esOutput, bool passthrough) {
     ALOGV("[Demux] received data from fid =%d", fid);
     vector<uint8_t> tmpData;
@@ -71,8 +94,12 @@ void Demux::postData(void* demux, int fid, bool esOutput, bool passthrough) {
                     readRet = dmxDev->getAmDmxDevice()
                           ->AM_DMX_Read(fid, tmpData.data()/* + headerLen*/, (int*)(&dataLen));
                 }
-                dmxDev->updateFilterOutput(fid, tmpData);
-                dmxDev->startFilterHandler(fid);
+
+                if (dmxDev->mFilters[fid]->isRecordFilter()) {
+                    ALOGD("[Demux] received record data = %d from fid =%d", fid, tmpData.size());
+                    dmxDev->sendFrontendInputToRecord(tmpData);
+                    dmxDev->startRecordFilterDispatcher();
+                }
             }
         }
     } else {
@@ -110,7 +137,7 @@ Return<Result> Demux::setFrontendDataSource(uint32_t frontendId) {
 
 Return<void> Demux::openFilter(const DemuxFilterType& type, uint32_t bufferSize,
                                const sp<IFilterCallback>& cb, openFilter_cb _hidl_cb) {
-    ALOGV("%s", __FUNCTION__);
+    ALOGD("%s", __FUNCTION__);
 
     int filterId;
 
@@ -123,7 +150,10 @@ Return<void> Demux::openFilter(const DemuxFilterType& type, uint32_t bufferSize,
     AmDmxDevice->AM_DMX_Open();
     AmDmxDevice->AM_DMX_AllocateFilter(&filterId);
     sp<Filter> filter = new Filter(type, (uint32_t)filterId, bufferSize, cb, this);
-
+    if (filter->isRecordFilter()) {
+        AmDmxDevice->dmx_dvr_open(INPUT_DEMOD);
+        AmDmxDevice->AM_DVR_SetCallback(this->postDvrData, this);
+    }
     if (!filter->createFilterMQ()) {
         _hidl_cb(Result::UNKNOWN_ERROR, filter);
         AmDmxDevice->AM_DMX_FreeFilter(filterId);
@@ -229,7 +259,7 @@ Return<Result> Demux::close() {
 
 Return<void> Demux::openDvr(DvrType type, uint32_t bufferSize, const sp<IDvrCallback>& cb,
                             openDvr_cb _hidl_cb) {
-    ALOGV("%s", __FUNCTION__);
+    ALOGD("%s", __FUNCTION__);
 
     if (cb == nullptr) {
         ALOGW("[Demux] DVR callback can't be null");

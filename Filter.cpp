@@ -168,6 +168,27 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
                     }
                     break;
                 }
+                case DemuxTsFilterType::RECORD: {
+                    struct dmx_pes_filter_params pparam;
+                    memset(&pparam, 0, sizeof(pparam));
+                    pparam.pid = mTpid;
+                    pparam.input = DMX_IN_FRONTEND;
+                    pparam.output = DMX_OUT_TS_TAP;
+                    pparam.pes_type = DMX_PES_OTHER;
+                    int buffsize = 1024*1024;
+                    if (mDemux->getAmDmxDevice()
+                        ->AM_DMX_SetBufferSize(mFilterId, buffsize) != 0 ) {
+                        ALOGE("record set buffersize");
+                        return Result::UNAVAILABLE;
+                    }
+                    if (mDemux->getAmDmxDevice()
+                        ->AM_DMX_SetPesFilter(mFilterId, &pparam) != 0 ) {
+                        ALOGE("record AM_DMX_SetPesFilter");
+                        return Result::UNAVAILABLE;
+                    }
+                    ALOGD("stream(pid = %d) start recording, filter = %d", mTpid, mFilterId);
+                }
+                break;
                 default:
                     break;
             }
@@ -188,10 +209,10 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
 }
 
 Return<Result> Filter::start() {
-    ALOGV("%s", __FUNCTION__);
+    ALOGD("%s, mFilterId = %d", __FUNCTION__, mFilterId);
     if (mDemux->getAmDmxDevice()
         ->AM_DMX_StartFilter(mFilterId) != 0 ) {
-        return Result::UNAVAILABLE;
+        ALOGD("demux start filter fail");
     }
 
     return startFilterLoop();
@@ -673,6 +694,19 @@ Result Filter::startRecordFilterHandler() {
         ALOGD("[Filter] dvr fails to write into record FMQ.");
         return Result::UNKNOWN_ERROR;
     }
+
+    // Create tsRecEvent and send callback
+    ALOGD("[Filter] create tsRecEvent and send callback.");
+    DemuxFilterTsRecordEvent tsRecEvent;
+    DemuxPid demuxPid;
+    demuxPid.tPid(static_cast<DemuxTpid>(mTpid));
+    tsRecEvent = {
+        .pid       = demuxPid,
+        .byteNumber = static_cast<uint64_t>(mRecordFilterOutput.size()),
+    };
+    int size = mFilterEvent.events.size();
+    mFilterEvent.events.resize(size + 1);
+    mFilterEvent.events[size].tsRecord(tsRecEvent);
 
     mRecordFilterOutput.clear();
     return Result::SUCCESS;

@@ -299,7 +299,7 @@ bool Dvr::startFilterDispatcher(bool isVirtualFrontend, bool isRecording) {
 bool Dvr::writeRecordFMQ(const std::vector<uint8_t>& data) {
     std::lock_guard<std::mutex> lock(mWriteLock);
     if (mRecordStatus == RecordStatus::OVERFLOW) {
-        ALOGW("[Dvr] stops writing and wait for the client side flushing.");
+        ALOGD("[Dvr] stops writing and wait for the client side flushing.");
         return true;
     }
     if (mDvrMQ->write(data.data(), data.size())) {
@@ -307,7 +307,6 @@ bool Dvr::writeRecordFMQ(const std::vector<uint8_t>& data) {
         maySendRecordStatusCallback();
         return true;
     }
-
     maySendRecordStatusCallback();
     return false;
 }

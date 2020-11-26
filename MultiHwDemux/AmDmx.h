@@ -79,7 +79,7 @@ typedef uint32_t AM_DMX_FilterMask_t;
 class AmHwMultiDemuxWrapper;
 
 typedef void (*AM_DMX_DataCb) (void* device, int fhandle, bool esOutput, bool passthrough);
-
+typedef void (*AM_DVR_DataCb) (void* device);
 struct AM_DMX_Filter {
     void *drv_data; /**< 驱动私有数据*/
     bool used;  /**< 此Filter是否已经分配*/
@@ -91,13 +91,19 @@ struct AM_DMX_Filter {
 };
 class AmLinuxDvd;
 
+struct AM_DVR_Data {
+    AM_DVR_DataCb cb;
+    void* user_data;
+};
+
 using namespace android;
 class AM_DMX_Device : public RefBase{
 
 public:
     AM_DMX_Device();
     ~AM_DMX_Device();
-    AM_ErrorCode_t dmx_drv_open(dmx_input_source_t inputSource);
+    AM_ErrorCode_t dmx_dvr_open(dmx_input_source_t inputSource);
+    AM_ErrorCode_t AM_dvr_Close(void);
     AM_ErrorCode_t dmx_get_used_filter(int filter_id, AM_DMX_Filter **pf);
     static void* dmx_data_thread(void *arg);
     AM_ErrorCode_t dmx_wait_cb(void);
@@ -122,20 +128,28 @@ public:
     //AM_ErrorCode_t AM_DMX_GetScrambleStatus(AM_Bool_t dev_status[2]);
 
     AM_ErrorCode_t AM_DMX_WriteTs(uint8_t* data,int32_t size,uint64_t timeout);
+    AM_ErrorCode_t AM_DVR_Read(/*int fhandle, */uint8_t* buff, int *size);
+    AM_ErrorCode_t AM_DVR_SetCallback(AM_DVR_DataCb cb, void *data);
+    static void* dvr_data_thread(void *arg);
     int dev_no;
     sp<AmLinuxDvd> drv;
     void *drv_data;
     AM_DMX_Filter filters[DMX_FILTER_COUNT];
     AmHwMultiDemuxWrapper* mDemuxWrapper;
     pthread_mutex_t     lock;
+    pthread_mutex_t     dvr_lock;
 private:
     int                 open_count;
     bool           enable_thread;
     int                 flags;
     pthread_t           thread;
+    pthread_t           dvrthread;
     //pthread_mutex_t     lock;
     pthread_cond_t      cond;
+    pthread_cond_t      dvr_cond;
     //AM_DMX_Source_t     src;
+    bool          enable_dvr_thread;
+    AM_DVR_Data   *dvrData;
 };
 
 

@@ -172,6 +172,12 @@
             android:layout_height="wrap_content"
             android:text="play stop" />
 
+        <Button
+            android:id="@+id/dvr_play"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="dvr play" />
+
         <TextView
             android:id="@+id/status"
             android:layout_width="match_parent"

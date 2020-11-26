@@ -265,7 +265,7 @@ AM_ErrorCode_t AmLinuxDvd::dvb_read(AM_DMX_Device *dev, AM_DMX_Filter *filter, u
     return AM_SUCCESS;
 }
 
-AM_ErrorCode_t AmLinuxDvd::dvr_open(AM_DMX_Device *dev,dmx_input_source_t inputSource) {
+AM_ErrorCode_t AmLinuxDvd::dvr_open(AM_DMX_Device *dev, dmx_input_source_t inputSource) {
     int ret = 0;
     char name[32];
     snprintf(name, sizeof(name), "/dev/dvb0.dvr%d", dev->dev_no);
@@ -327,6 +327,46 @@ AM_ErrorCode_t AmLinuxDvd::dvr_close(void) {
     if (mDvrFd > 0) {
         close(mDvrFd);
     }
+    return AM_SUCCESS;
+}
+
+AM_ErrorCode_t AmLinuxDvd::dvr_poll(int timeout)
+{
+    int fd = (long)mDvrFd;
+    struct pollfd fds;
+    int ret;
+
+    fds.events = POLLIN|POLLERR;
+    fds.fd     = fd;
+
+    ret = poll(&fds, 1, timeout);
+    if (ret <= 0)
+    {
+        return AM_DMX_ERR_TIMEOUT;
+    }
+
+    return AM_SUCCESS;
+}
+
+AM_ErrorCode_t  AmLinuxDvd::dvr_read(uint8_t *buf, int *size)
+{
+    int fd = (long)mDvrFd;
+    int len = *size;
+    int ret;
+
+    if (fd == -1)
+        return AM_DMX_ERR_NOT_ALLOCATED;
+
+    ret = read(fd, buf, len);
+    if (ret <= 0)
+    {
+        if (errno == ETIMEDOUT)
+            return AM_DMX_ERR_TIMEOUT;
+        ALOGE("read dvr failed (%s) %d", strerror(errno), errno);
+        return AM_DMX_ERR_SYS;
+    }
+
+    *size = ret;
     return AM_SUCCESS;
 }
 
