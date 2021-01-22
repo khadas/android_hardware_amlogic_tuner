@@ -173,10 +173,16 @@
             android:text="play stop" />
 
         <Button
-            android:id="@+id/dvr_play"
+            android:id="@+id/local_play_start"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="dvr play" />
+            android:text="local play start" />
+
+        <Button
+            android:id="@+id/local_play_stop"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="local play stop" />
 
         <TextView
             android:id="@+id/status"

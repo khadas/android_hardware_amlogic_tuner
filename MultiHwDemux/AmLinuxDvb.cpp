@@ -274,7 +274,7 @@ AM_ErrorCode_t AmLinuxDvd::dvr_open(AM_DMX_Device *dev, dmx_input_source_t input
         ALOGE("cannot open \"%s\" (%s)", name, strerror(errno));
         return -1;
     }
-    ALOGI("open %s  ok \n", name);
+    ALOGI("open %s  ok mDvrFd = %d\n", name, mDvrFd);
 
     if (inputSource == INPUT_LOCAL) {
         ALOGI("set ---> INPUT_LOCAL \n");
@@ -331,8 +331,7 @@ AM_ErrorCode_t AmLinuxDvd::dvr_close(void) {
 }
 
 AM_ErrorCode_t AmLinuxDvd::dvr_poll(int timeout)
-{
-    int fd = (long)mDvrFd;
+{   int fd = mDvrFd;
     struct pollfd fds;
     int ret;
 
@@ -340,6 +339,7 @@ AM_ErrorCode_t AmLinuxDvd::dvr_poll(int timeout)
     fds.fd     = fd;
 
     ret = poll(&fds, 1, timeout);
+    ALOGD("fd = %d, ret = %d", fd, ret);
     if (ret <= 0)
     {
         return AM_DMX_ERR_TIMEOUT;

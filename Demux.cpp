@@ -28,6 +28,7 @@ namespace implementation {
 
 #define WAIT_TIMEOUT 3000000000
 
+static bool bSupportLocalPlayer = true;
 Demux::Demux(uint32_t demuxId, sp<Tuner> tuner) {
     mDemuxId = demuxId;
     mTunerService = tuner;
@@ -36,6 +37,10 @@ Demux::Demux(uint32_t demuxId, sp<Tuner> tuner) {
 }
 
 Demux::~Demux() {}
+
+bool Demux::getLocalPlayerStatus() {
+    return bSupportLocalPlayer;
+}
 
 void Demux::postDvrData(void* demux) {
     Demux *dmxDev = (Demux*)demux;
@@ -95,11 +100,8 @@ void Demux::postData(void* demux, int fid, bool esOutput, bool passthrough) {
                           ->AM_DMX_Read(fid, tmpData.data()/* + headerLen*/, (int*)(&dataLen));
                 }
 
-                if (dmxDev->mFilters[fid]->isRecordFilter()) {
-                    ALOGD("[Demux] received record data = %d from fid =%d", fid, tmpData.size());
-                    dmxDev->sendFrontendInputToRecord(tmpData);
-                    dmxDev->startRecordFilterDispatcher();
-                }
+                dmxDev->updateFilterOutput(fid, tmpData);
+                dmxDev->startFilterHandler(fid);
             }
         }
     } else {
@@ -150,16 +152,18 @@ Return<void> Demux::openFilter(const DemuxFilterType& type, uint32_t bufferSize,
     AmDmxDevice->AM_DMX_Open();
     AmDmxDevice->AM_DMX_AllocateFilter(&filterId);
     sp<Filter> filter = new Filter(type, (uint32_t)filterId, bufferSize, cb, this);
-    if (filter->isRecordFilter()) {
+    if (bSupportLocalPlayer) {
+        AmDmxDevice->dmx_dvr_open(INPUT_LOCAL);
+    } else if (filter->isRecordFilter()) {
         AmDmxDevice->dmx_dvr_open(INPUT_DEMOD);
         AmDmxDevice->AM_DVR_SetCallback(this->postDvrData, this);
     }
+
     if (!filter->createFilterMQ()) {
         _hidl_cb(Result::UNKNOWN_ERROR, filter);
         AmDmxDevice->AM_DMX_FreeFilter(filterId);
         return Void();
     }
-
     AmDmxDevice->AM_DMX_SetCallback(filterId, this->postData, this);
     mFilters[filterId] = filter;
     if (filter->isPcrFilter()) {
@@ -336,7 +340,12 @@ void Demux::startBroadcastTsFilter(vector<uint8_t> data) {
     }
     for (it = mPlaybackFilterIds.begin(); it != mPlaybackFilterIds.end(); it++) {
         if (pid == mFilters[*it]->getTpid()) {
-            mFilters[*it]->updateFilterOutput(data);
+            if (bSupportLocalPlayer) {
+                ALOGD("start write dvr data to dvr device");
+                AmDmxDevice->AM_DMX_WriteTs(data.data(), data.size(), 1000);
+            } else {
+                mFilters[*it]->updateFilterOutput(data);
+            }
         }
     }
 }

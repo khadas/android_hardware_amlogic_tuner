@@ -83,6 +83,7 @@ class Demux : public IDemux {
     virtual Return<Result> disconnectCiCam() override;
     static void postData(void* demux, int fid, bool esOutput, bool passthrough);
     static void postDvrData(void* demux);
+    bool getLocalPlayerStatus();
 
     // Functions interacts with Tuner Service
     void stopFrontendInput();

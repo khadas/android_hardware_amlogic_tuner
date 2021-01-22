@@ -197,8 +197,8 @@ void Dvr::playbackThreadLoop() {
         }
         // Our current implementation filter the data and write it into the filter FMQ immediately
         // after the DATA_READY from the VTS/framework
-        if (!readPlaybackFMQ(false /*isVirtualFrontend*/, false /*isRecording*/) ||
-            !startFilterDispatcher(false /*isVirtualFrontend*/, false /*isRecording*/)) {
+        if (!readPlaybackFMQ(true /*isVirtualFrontend*/, false /*isRecording*/) ||
+            !startFilterDispatcher(true /*isVirtualFrontend*/, false /*isRecording*/)) {
             ALOGE("[Dvr] playback data failed to be filtered. Ending thread");
             break;
         }
@@ -268,7 +268,7 @@ void Dvr::startTpidFilter(vector<uint8_t> data) {
     for (it = mFilters.begin(); it != mFilters.end(); it++) {
         uint16_t pid = ((data[1] & 0x1f) << 8) | ((data[2] & 0xff));
         if (DEBUG_DVR) {
-            ALOGW("[Dvr] start ts filter pid: %d", pid);
+            ALOGD("[Dvr] start ts filter pid: %d", pid);
         }
         if (pid == mDemux->getFilterTpid(it->first)) {
             mDemux->updateFilterOutput(it->first, data);

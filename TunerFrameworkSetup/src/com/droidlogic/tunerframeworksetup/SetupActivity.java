@@ -83,7 +83,8 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private Button mSearchStop = null;
     private Button mPlayStart = null;
     private Button mPlayStop = null;
-    private Button mDvrPlay  = null;
+    private Button mLocalPlayStart  = null;
+    private Button mLocalPlayStop  = null;
     private SurfaceView mPlayerView = null;
 
     private EditText mFrequency = null;
@@ -137,10 +138,10 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                            200/*PRIORITY_HINT_USE_CASE_TYPE_SCAN*/);
         mTuner.setOnTuneEventListener(mExecutor, this);
         //DvrPlayback
-        mDvrPlayback = mTuner.openDvrPlayback(1024*1024*10, mExecutor, this);
+        mDvrPlayback = mTuner.openDvrPlayback(1024*1024*10*20, mExecutor, this);
         mDvrPlayback.configure(getDvrSettings());
         //DvrRecorder
-        mDvrRecorder = mTuner.openDvrRecorder(1024*1024*10*10, mExecutor, this);
+        mDvrRecorder = mTuner.openDvrRecorder(1024*1024*10*20, mExecutor, this);
         mDvrRecorder.configure(getDvrSettings());
         try {
             tmpFile = File.createTempFile("tuner", "dvr_test");
@@ -183,7 +184,8 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         mSearchStop = (Button)findViewById(R.id.search_stop);
         mPlayStart = (Button)findViewById(R.id.play_start);
         mPlayStop = (Button)findViewById(R.id.play_stop);
-        mDvrPlay  = (Button)findViewById(R.id.dvr_play);
+        mLocalPlayStart  = (Button)findViewById(R.id.local_play_start);
+        mLocalPlayStop  = (Button)findViewById(R.id.local_play_stop);
         mPlayerView = (SurfaceView)findViewById(R.id.play_view);
         mFrequency = (EditText)findViewById(R.id.frequency);
         mVideoPid = (EditText)findViewById(R.id.video_pid);
@@ -198,7 +200,8 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         mSearchStop.setOnClickListener(mClickListener);
         mPlayStart.setOnClickListener(mClickListener);
         mPlayStop.setOnClickListener(mClickListener);
-        mDvrPlay.setOnClickListener(mClickListener);
+        mLocalPlayStart.setOnClickListener(mClickListener);
+        mLocalPlayStop.setOnClickListener(mClickListener);
         mPlayerView.getHolder().addCallback(mSurfaceHolderCallback);
         mFrequency.setText(getParameter("frequency"));
         mVideoPid.setText(getParameter("video"));
@@ -254,9 +257,13 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                     mUiHandler.sendMessage(mUiHandler.obtainMessage(UI_MSG_STATUS, "play_stop"));
                     mTaskHandler.sendEmptyMessage(TASK_MSG_STOP_PLAY);
                     break;
-                case R.id.dvr_play:
-                    mUiHandler.sendMessage(mUiHandler.obtainMessage(UI_MSG_STATUS, "dvr_play"));
-                    mTaskHandler.sendEmptyMessage(TASK_MSG_DVR_PLAY);
+                case R.id.local_play_start:
+                    mUiHandler.sendMessage(mUiHandler.obtainMessage(UI_MSG_STATUS, "local_play_start"));
+                    mTaskHandler.sendEmptyMessage(TASK_MSG_LOCAL_PLAY_START);
+                    break;
+                case R.id.local_play_stop:
+                    mUiHandler.sendMessage(mUiHandler.obtainMessage(UI_MSG_STATUS, "local_play_stop"));
+                    mTaskHandler.sendEmptyMessage(TASK_MSG_LOCAL_PLAY_STOP);
                     break;
                 default:
                     needUpdate = false;
@@ -321,7 +328,8 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private final static int TASK_MSG_PULL_SECTION = 5;
     private final static int TASK_MSG_STOP_SECTION = 6;
     private final static int TASK_MSG_SHOW_CHNLIST = 7;
-    private final static int TASK_MSG_DVR_PLAY = 8;
+    private final static int TASK_MSG_LOCAL_PLAY_START = 8;
+    private final static int TASK_MSG_LOCAL_PLAY_STOP = 9;
 
     private class TaskHandlerCallback implements Handler.Callback {
 
@@ -336,7 +344,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                     searchStop();
                     break;
                 case TASK_MSG_START_PLAY:
-                    playStart();
+                    playStart(true);
                     break;
                 case TASK_MSG_STOP_PLAY:
                     playStop();
@@ -351,12 +359,16 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                 case TASK_MSG_SHOW_CHNLIST:
                     showChannelList();
                     break;
-                case TASK_MSG_DVR_PLAY:
+                case TASK_MSG_LOCAL_PLAY_START:
                     try {
                         startDvrPlayback();
                     } catch (Exception e) {
                         Log.e(TAG, "message:" + e);
+                        e.printStackTrace();
                     }
+                    break;
+                case TASK_MSG_LOCAL_PLAY_STOP:
+                    stopDvrPlayback();
                     break;
                 default:
                     result = false;
@@ -392,7 +404,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         Log.d(TAG, "searchStop");
     }
 
-    private void playStart() {
+    private void playStart(boolean bTuner) {
         Log.d(TAG, "playStart");
         if (mMediaCodecPlayer == null) {
             //mMediaCodecPlayer = new MediaCodecPlayer(SetupActivity.this, mSurface, MediaCodecPlayer.PLAYER_MODE_LOCAL, null, "/data/local/tmp/stream.trp");
@@ -413,26 +425,27 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         }
         mMediaCodecPlayer.startPlayer();
 
-        FrontendSettings feSettings = DvbtFrontendSettings
-            .builder()
-            .setFrequency(Integer.parseInt(mFrequency.getText().toString())  * 1000000/*506000000*/)
-            .setTransmissionMode(DvbtFrontendSettings.TRANSMISSION_MODE_AUTO)
-            .setBandwidth(DvbtFrontendSettings.BANDWIDTH_AUTO)
-            .setConstellation(DvbtFrontendSettings.CONSTELLATION_QPSK)
-            .setHierarchy(DvbtFrontendSettings.HIERARCHY_AUTO)
-            .setHighPriorityCodeRate(DvbtFrontendSettings.CODERATE_AUTO)
-            .setLowPriorityCodeRate(DvbtFrontendSettings.CODERATE_AUTO)
-            .setGuardInterval(DvbtFrontendSettings.GUARD_INTERVAL_AUTO)
-            .build();
-        mTuner.tune(feSettings);
-        Log.d(TAG, "playStart");
+        if (bTuner) {
+            FrontendSettings feSettings = DvbtFrontendSettings
+                .builder()
+                .setFrequency(Integer.parseInt(mFrequency.getText().toString())  * 1000000/*506000000*/)
+                .setTransmissionMode(DvbtFrontendSettings.TRANSMISSION_MODE_AUTO)
+                .setBandwidth(DvbtFrontendSettings.BANDWIDTH_AUTO)
+                .setConstellation(DvbtFrontendSettings.CONSTELLATION_QPSK)
+                .setHierarchy(DvbtFrontendSettings.HIERARCHY_AUTO)
+                .setHighPriorityCodeRate(DvbtFrontendSettings.CODERATE_AUTO)
+                .setLowPriorityCodeRate(DvbtFrontendSettings.CODERATE_AUTO)
+                .setGuardInterval(DvbtFrontendSettings.GUARD_INTERVAL_AUTO)
+                .build();
+            mTuner.tune(feSettings);
+        }
     }
 
     private void playProgram(ProgramInfo program) {
         if (program == null)
             return;
         mCurrentProgram = program;
-        playStart();
+        playStart(true);
     }
 
     private void playStop() {
@@ -514,6 +527,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                 return;
             }
             int sectionLen = ((((int)(data[1]))&0x03 << 8) & 0xff) + (((int)data[2]) & 0xff);
+            Log.d(TAG, "section id = " + sectionLen);
             for (int i =8; i< sectionLen + 3/*befor section number index*/ -4/*crc lenth*/; i += 4) {
                 ProgramInfo program = new ProgramInfo();
                 program.freq = Integer.parseInt(mFrequency.getText().toString());
@@ -644,7 +658,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     }
 
     private Filter openVideoFilter(int pid) {
-         Filter filter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_VIDEO,  1024 * 1024, mExecutor, mfilterCallback);
+         Filter filter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_VIDEO,  1024 * 1024 *10 *20, mExecutor, mfilterCallback);
          Settings videoSettings = AvSettings
         .builder(Filter.TYPE_TS, false)
         .setPassthrough(false)
@@ -689,7 +703,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     }
 
     private Filter openDvrFilter(int vpid) {
-        Filter filter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_RECORD, 1000, mExecutor, mfilterCallback);
+        Filter filter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_RECORD, 1024*1024*10*20, mExecutor, mfilterCallback);
         if (filter != null) {
             Settings settings = RecordSettings
                     .builder(Filter.TYPE_TS)
@@ -701,6 +715,8 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                     .setSettings(settings)
                     .build();
             filter.configure(config);
+            filter.start();
+            filter.flush();
         }
         return filter;
     }
@@ -713,12 +729,6 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
 
         mDvrRecorder.start();
         mDvrRecorder.flush();
-
-        if (mDvrFilter != null) {
-            mDvrFilter.start();
-            mDvrFilter.flush();
-        }
-
     }
 
     private void readDataToPlay() {
@@ -732,7 +742,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                  }
                  mbStart = true;
                  while (mbStart) {
-                    long len = mDvrPlayback.read(1024 * 1024);
+                    long len = mDvrPlayback.read(100 * 188);
                     Log.d(TAG, "print Byte:" + len);
                     if (len == 0) break;
                  }
@@ -742,12 +752,23 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     }
     private void startDvrPlayback() throws Exception {
         Log.d(TAG, "start dvr play back");
-        Filter f = mTuner.openFilter(
-                Filter.TYPE_TS, Filter.SUBTYPE_SECTION, 1000, mExecutor, mfilterCallback);
-        mDvrPlayback.attachFilter(f);
-        mDvrPlayback.detachFilter(f);
-        ParcelFileDescriptor fd = ParcelFileDescriptor.open(tmpFile, ParcelFileDescriptor.MODE_READ_WRITE);
+        playStart(false);
+        int vpid = Integer.parseInt(mVideoPid.getText().toString());
+        if (vpid == 0) {
+            Log.d(TAG, " set pid is 0");
+            return;
+        }
+        Filter mVideoFilter = openVideoFilter(vpid);
+        mDvrPlayback.attachFilter(mVideoFilter);
+        mDvrPlayback.detachFilter(mVideoFilter);
+        File LocalFile = new File("/data/data/com.droidlogic.tunerframeworksetup/cache/stream.trp");
+        ParcelFileDescriptor fd = ParcelFileDescriptor.open(LocalFile, ParcelFileDescriptor.MODE_READ_WRITE);
 
+        if (fd == null) {
+            Log.d(TAG, "fd is null");
+            return;
+        }
+        Log.d(TAG, "file fd =" + fd.getFd());
         mDvrPlayback.setFileDescriptor(fd);
         mDvrPlayback.start();
         mDvrPlayback.flush();
@@ -755,6 +776,18 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
 
     }
 
+
+    private void stopDvrPlayback() {
+        if (mVideoFilter != null) {
+            mVideoFilter.stop();
+            mVideoFilter.close();
+            mVideoFilter = null;
+        }
+
+        if (mMediaCodecPlayer != null) {
+            mMediaCodecPlayer.stopLocalPlayer();
+        }
+    }
     public void onTuneEvent(int tuneEvent) {
         Log.d(TAG, "getTune Event: " + tuneEvent);
         mUiHandler.sendMessage(mUiHandler.obtainMessage(UI_MSG_STATUS, "Got lock event: " + tuneEvent));
@@ -772,13 +805,6 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
             if (mTuner != null) {
                 mVideoFilter = openVideoFilter(vpid);
                 mAudioFilter = openAudioFilter(apid);
-
-                //start dvr recorder
-                try {
-                    startDvrRecorder(vpid);
-                } catch (Exception e) {
-                    Log.e(TAG, "message"  + e);
-                }
             }
         } else if (tuneEvent == 2) {
             Log.d(TAG, "tuner lock time out");

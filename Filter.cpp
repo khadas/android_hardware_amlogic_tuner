@@ -149,7 +149,7 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
                     struct dmx_pes_filter_params vparam;
                     vparam.pid = mTpid;
                     vparam.pes_type = DMX_PES_VIDEO0;
-                    vparam.input = DMX_IN_FRONTEND;
+                    vparam.input = (mDemux->getLocalPlayerStatus()) ? DMX_IN_DVR : DMX_IN_FRONTEND;
                     vparam.output = DMX_OUT_TAP;
                     vparam.flags = 0;
                     vparam.flags |= DMX_ES_OUTPUT;
@@ -175,12 +175,6 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
                     pparam.input = DMX_IN_FRONTEND;
                     pparam.output = DMX_OUT_TS_TAP;
                     pparam.pes_type = DMX_PES_OTHER;
-                    int buffsize = 1024*1024;
-                    if (mDemux->getAmDmxDevice()
-                        ->AM_DMX_SetBufferSize(mFilterId, buffsize) != 0 ) {
-                        ALOGE("record set buffersize");
-                        return Result::UNAVAILABLE;
-                    }
                     if (mDemux->getAmDmxDevice()
                         ->AM_DMX_SetPesFilter(mFilterId, &pparam) != 0 ) {
                         ALOGE("record AM_DMX_SetPesFilter");
