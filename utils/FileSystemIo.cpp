@@ -15,7 +15,7 @@
 android::SystemControlClient *mSystemControl;
 
 size_t FileSystem_create() {
-    mSystemControl = new android::SystemControlClient();
+    mSystemControl = android::SystemControlClient::getInstance();
     if (mSystemControl == NULL)
         return -1;
     return 0;
