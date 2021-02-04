@@ -34,6 +34,7 @@ namespace implementation {
 
 class Frontend;
 class Demux;
+class Descrambler;
 
 class Tuner : public ITuner {
   public:
@@ -66,6 +67,8 @@ class Tuner : public ITuner {
     void frontendStartTune(uint32_t frontendId);
     void frontendStopTune(uint32_t frontendId);
 
+    void attachDescramblerToDemux(uint32_t descramblerId, uint32_t demuxId) const;
+    void detachDescramblerFromDemux(uint32_t descramblerId, uint32_t demuxId) const;
   private:
     virtual ~Tuner();
     // Static mFrontends array to maintain local frontends information
@@ -73,11 +76,13 @@ class Tuner : public ITuner {
     vector<FrontendInfo::FrontendCapabilities> mFrontendCaps;
     std::map<uint32_t, uint32_t> mFrontendToDemux;
     std::map<uint32_t, sp<Demux>> mDemuxes;
+    std::map<uint32_t, sp<Descrambler>> mDescramblers;
     // To maintain how many Frontends we have
     int mFrontendSize;
     // The last used demux id. Initial value is -1.
     // First used id will be 0.
-    int mLastUsedId = -1;
+    uint32_t mLastUsedId = -1;
+    int mLastUsedDescramblerId = -1;
     vector<sp<Lnb>> mLnbs;
 };
 

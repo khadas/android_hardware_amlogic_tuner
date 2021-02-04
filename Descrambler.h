@@ -19,6 +19,9 @@
 
 #include <android/hardware/tv/tuner/1.0/IDescrambler.h>
 #include <android/hardware/tv/tuner/1.0/ITuner.h>
+#include <fmq/MessageQueue.h>
+#include <inttypes.h>
+#include "Tuner.h"
 
 using namespace std;
 
@@ -29,29 +32,46 @@ namespace tuner {
 namespace V1_0 {
 namespace implementation {
 
-using ::android::hardware::tv::tuner::V1_0::IDescrambler;
-using ::android::hardware::tv::tuner::V1_0::Result;
+using ::android::hardware::kSynchronizedReadWrite;
+using ::android::hardware::MessageQueue;
+using DvrMQ = MessageQueue<uint8_t, kSynchronizedReadWrite>;
+
+class Tuner;
 
 class Descrambler : public IDescrambler {
-  public:
-    Descrambler();
+ public:
+  Descrambler(uint32_t descramblerId, sp<Tuner> tuner);
 
-    virtual Return<Result> setDemuxSource(uint32_t demuxId) override;
+  virtual Return<Result> setDemuxSource(uint32_t demuxId) override;
 
-    virtual Return<Result> setKeyToken(const hidl_vec<uint8_t>& keyToken) override;
+  virtual Return<Result> setKeyToken(const hidl_vec<uint8_t>& keyToken) override;
 
-    virtual Return<Result> addPid(const DemuxPid& pid,
-                                  const sp<IFilter>& optionalSourceFilter) override;
+  virtual Return<Result> addPid(const DemuxPid& pid,
+                                const sp<IFilter>& optionalSourceFilter) override;
 
-    virtual Return<Result> removePid(const DemuxPid& pid,
-                                     const sp<IFilter>& optionalSourceFilter) override;
+  virtual Return<Result> removePid(const DemuxPid& pid,
+                                   const sp<IFilter>& optionalSourceFilter) override;
 
-    virtual Return<Result> close() override;
+  virtual Return<Result> close() override;
 
-  private:
-    virtual ~Descrambler();
-    uint32_t mSourceDemuxId;
-    bool mDemuxSet = false;
+  bool IsPidSupported(uint16_t pid);
+
+ private:
+  //const bool DEBUG_DESCRAMBLER = false;
+  virtual ~Descrambler();
+
+  uint32_t mDescramblerId;
+  sp<Tuner> mTunerService;
+
+  // Transport stream pid only.
+  std::set<uint16_t> added_pid;
+
+  uint32_t mSourceDemuxId;
+  bool mDemuxSet = false;
+
+  std::mutex mDescrambleLock;
+
+  uint32_t mSessionId;
 };
 
 }  // namespace implementation

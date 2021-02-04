@@ -148,7 +148,9 @@ Return<void> Tuner::getDemuxCaps(getDemuxCaps_cb _hidl_cb) {
 Return<void> Tuner::openDescrambler(openDescrambler_cb _hidl_cb) {
     ALOGV("%s", __FUNCTION__);
 
-    sp<IDescrambler> descrambler = new Descrambler();
+    uint32_t descramblerId = ++mLastUsedDescramblerId;
+    sp<Descrambler> descrambler = new Descrambler(descramblerId, this);
+    mDescramblers[descramblerId] = descrambler;
 
     _hidl_cb(Result::SUCCESS, descrambler);
     return Void();
@@ -252,6 +254,23 @@ void Tuner::frontendStartTune(uint32_t frontendId) {
         demuxId = it->second;
         mDemuxes[demuxId]->startFrontendInputLoop();
     }
+}
+
+void Tuner::attachDescramblerToDemux(uint32_t descramblerId,
+                                     uint32_t demuxId) const {
+  if (mDescramblers.find(descramblerId) != mDescramblers.end()
+      && mDemuxes.find(demuxId) != mDemuxes.end()) {
+    mDemuxes.at(demuxId)->attachDescrambler(descramblerId,
+                                            mDescramblers.at(descramblerId));
+  }
+}
+
+void Tuner::detachDescramblerFromDemux(uint32_t descramblerId,
+                                       uint32_t demuxId) const {
+  if (mDescramblers.find(descramblerId) != mDescramblers.end()
+      && mDemuxes.find(demuxId) != mDemuxes.end()) {
+    mDemuxes.at(demuxId)->detachDescrambler(descramblerId);
+  }
 }
 
 }  // namespace implementation

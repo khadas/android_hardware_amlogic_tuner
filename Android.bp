@@ -48,6 +48,7 @@ cc_defaults {
         "liblog",
         "libstagefright_foundation",
         "libutils",
+        "libcrypto",
         "libsystemcontrolservice",
         "vendor.amlogic.hardware.systemcontrol@1.0",
         "vendor.amlogic.hardware.systemcontrol@1.1",

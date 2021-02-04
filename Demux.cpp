@@ -333,11 +333,11 @@ Result Demux::removeFilter(uint32_t filterId) {
 }
 
 void Demux::startBroadcastTsFilter(vector<uint8_t> data) {
-    set<uint32_t>::iterator it;
     uint16_t pid = ((data[1] & 0x1f) << 8) | ((data[2] & 0xff));
     if (DEBUG_DEMUX) {
         ALOGW("[Demux] start ts filter pid: %d", pid);
     }
+    set<uint32_t>::iterator it;
     for (it = mPlaybackFilterIds.begin(); it != mPlaybackFilterIds.end(); it++) {
         if (pid == mFilters[*it]->getTpid()) {
             if (bSupportLocalPlayer) {
@@ -472,6 +472,14 @@ sp<AM_DMX_Device> Demux::getAmDmxDevice(void) {
     return AmDmxDevice;
 }
 
+void Demux::attachDescrambler(uint32_t descramblerId,
+                              sp<Descrambler> descrambler) {
+  mDescramblers[descramblerId] = descrambler;
+}
+
+void Demux::detachDescrambler(uint32_t descramblerId) {
+  mDescramblers.erase(descramblerId);
+}
 }  // namespace implementation
 }  // namespace V1_0
 }  // namespace tuner

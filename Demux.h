@@ -21,6 +21,7 @@
 #include <fmq/MessageQueue.h>
 #include <math.h>
 #include <set>
+#include "Descrambler.h"
 #include "Dvr.h"
 #include "Filter.h"
 #include "Frontend.h"
@@ -49,6 +50,7 @@ using ::android::hardware::tv::tuner::V1_0::Result;
 
 using FilterMQ = MessageQueue<uint8_t, kSynchronizedReadWrite>;
 
+class Descrambler;
 class Dvr;
 class Filter;
 class Frontend;
@@ -108,6 +110,8 @@ class Demux : public IDemux {
     void sendFrontendInputToRecord(vector<uint8_t> data);
     bool startRecordFilterDispatcher();
     sp<AM_DMX_Device> getAmDmxDevice();
+    void attachDescrambler(uint32_t descramblerId, sp<Descrambler> descrambler);
+    void detachDescrambler(uint32_t descramblerId);
 
   private:
     // Tuner service
@@ -115,6 +119,8 @@ class Demux : public IDemux {
 
     // Frontend source
     sp<Frontend> mFrontend;
+
+    sp<Descrambler> mDescrambler;
 
     // A struct that passes the arguments to a newly created filter thread
     struct ThreadArgs {
@@ -158,6 +164,11 @@ class Demux : public IDemux {
      * The array number is the filter ID.
      */
     std::map<uint32_t, sp<Filter>> mFilters;
+    /**
+     * A list of created Descrambler sp.
+     * The array number is the Descrambler ID.
+     */
+    std::map<uint32_t, sp<Descrambler>> mDescramblers;
 
     /**
      * Local reference to the opened Timer Filter instance.
