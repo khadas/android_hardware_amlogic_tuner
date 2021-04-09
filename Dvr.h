@@ -93,6 +93,10 @@ class Dvr : public IDvr {
 
     DvrType mType;
     uint32_t mBufferSize;
+#ifdef TUNERHAL_DBG
+    uint32_t mDvrReadDataSize = 0;
+    uint32_t mInjectDvrTotalLen = 0;
+#endif
     sp<IDvrCallback> mCallback;
     std::map<uint32_t, sp<IFilter>> mFilters;
 

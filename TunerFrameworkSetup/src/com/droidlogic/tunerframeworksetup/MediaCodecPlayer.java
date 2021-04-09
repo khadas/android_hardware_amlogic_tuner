@@ -6,6 +6,7 @@ import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
+
 import android.util.Log;
 import android.view.Surface;
 
@@ -26,7 +27,7 @@ public class MediaCodecPlayer {
     private final static String TAG = MediaCodecPlayer.class.getSimpleName();
 
     public static final String TEST_MIME_TYPE = MediaFormat.MIMETYPE_VIDEO_AVC;//264
-    private static final int APP_BUFFER_SIZE = 2 * 1024 * 1024;  // 1 MB
+    private static final int APP_BUFFER_SIZE = 2 * 1024 * 1024;  // 2 MB
 
     //audio
     public static final String AUDIO_MIME_TYPE = MediaFormat.MIMETYPE_AUDIO_AAC;
@@ -41,6 +42,7 @@ public class MediaCodecPlayer {
     private String mPlayerMode = null;
     private String mPlayerMimeType = null;
     private String mPlayerPath = null;
+    private boolean mIsPassthrough = false;
     private Context mContext = null;
     private Surface mSurface = null;
     private boolean mStarted = false;
@@ -58,12 +60,13 @@ public class MediaCodecPlayer {
     private InputSlotListener mInputSlotListener = null;
     private OutputSlotListener mOutputSlotListener = null;
 
-    public MediaCodecPlayer(Context context, Surface surface, String playerMode, String playerMimeType, String playerPath) {
+    public MediaCodecPlayer(Context context, Surface surface, String playerMode, String playerMimeType, String playerPath, boolean isPassThrough) {
         this.mContext = context;
         this.mSurface = surface;
         this.mPlayerMode = playerMode;
         this.mPlayerMimeType = playerMimeType;
         this.mPlayerPath = playerPath;
+        this.mIsPassthrough = isPassThrough;
     }
 
     public void setMediaCodecPlayerCallback(MediaCodecPlayerStatus mediaCodecPlayerStatus) {
@@ -101,6 +104,7 @@ public class MediaCodecPlayer {
     }
 
     public void setVideoMediaFormat(MediaFormat mediaFormat) {
+        Log.d(TAG, "setVideoMediaFormat");
         mMediaFormat = mediaFormat;
     }
 
@@ -109,6 +113,7 @@ public class MediaCodecPlayer {
     }
 
     public void startPlayer() {
+        Log.d(TAG, "startPlayer mPlayerMode:" + mPlayerMode);
         switch (mPlayerMode) {
             case PLAYER_MODE_LOCAL:
                 startLocalPlayer();
@@ -123,6 +128,7 @@ public class MediaCodecPlayer {
     }
 
     public void stopPlayer() {
+        Log.d(TAG, "stopPlayer mPlayerMode:" + mPlayerMode);
         switch (mPlayerMode) {
             case PLAYER_MODE_LOCAL:
                 stopLocalPlayer();
@@ -207,8 +213,8 @@ public class MediaCodecPlayer {
 
     public boolean WriteTunerInputVideoData(SetupActivity.LinearInputBlock1 linearBlock, long timestampUs, int offset, int length) {
         boolean result = true;
-        Log.d(TAG, "WriteTunerInputVideoData... ...");
         SlotEvent event = null;
+        Log.d(TAG, "WriteTunerInputVideoData... ...");
         try {
             event = mBufferQueue.take();
         } catch (InterruptedException e) {
@@ -216,6 +222,7 @@ public class MediaCodecPlayer {
             result = false;
         }
         if (event != null) {
+            Log.d(TAG, "event input:" + event.input);
             if (event.input) {
                 mInputSlotListener.onInputSlot(mMediaCodec, event.index, timestampUs, offset, length,  null, linearBlock);
             } else {
@@ -236,6 +243,7 @@ public class MediaCodecPlayer {
             result = false;
         }
         if (event != null) {
+            Log.d(TAG, "event input:" + event.input);
             if (event.input) {
                 mInputSlotListener.onInputSlot(mAudioMediaCodec, event.index, timestampUs, offset, length,  null, linearBlock);
             } else {
@@ -246,6 +254,7 @@ public class MediaCodecPlayer {
     }
 
     public void startLocalPlayer() {
+    Log.d(TAG, "Start local player");
         if (mStarted) {
             Log.d(TAG, "startLocalPlayer started already");
             return;
@@ -254,7 +263,7 @@ public class MediaCodecPlayer {
         if (mVideoMediaCodecCallback == null) {
             mVideoMediaCodecCallback = new MediaCodecCallback();
         }
-        if (initLocalMediaExtractor() && initLocalMediaCodec(true)) {
+        if (initLocalMediaExtractor() && initLocalMediaCodec(mIsPassthrough ? false : true)) {
             Log.d(TAG, "initPlayer inited");
             initLocalLinearBlock();
             startVideoMediaCodec();
@@ -263,6 +272,7 @@ public class MediaCodecPlayer {
     }
 
     public void startFeedData() {
+    Log.d(TAG, "Start feed data");
         List<Long> timestampList = Collections.synchronizedList(new ArrayList<Long>());
         mInputSlotListener = new ExtractorInputSlotListener.Builder()
                 .setExtractor(mMediaExtractor)
@@ -282,6 +292,7 @@ public class MediaCodecPlayer {
     }
 
     public void stopLocalPlayer() {
+    Log.d(TAG, "Stop local player");
         if (!mStarted || mStopping) {
             Log.d(TAG, "startLocalPlayer started already");
             return;
@@ -289,24 +300,31 @@ public class MediaCodecPlayer {
         mStopping = true;
         if (mLocalMediaCodecRunnable != null/* && mLocalMediaCodecRunnable.mRunning && !mLocalMediaCodecRunnable.mStopped*/) {
             mLocalMediaCodecRunnable.stopRun();
+            mLocalMediaCodecRunnable = null;
         }
         if (mMediaExtractor != null) {
             mMediaExtractor.release();
+            mMediaExtractor = null;
         }
         if (mMediaCodec != null) {
             mMediaCodec.release();
+            mMediaCodec = null;
         }
         if (mLinearInputBlock != null && mLinearInputBlock.block != null) {
             mLinearInputBlock.block.recycle();
+            mLinearInputBlock.block = null;
+            mLinearInputBlock = null;
         }
         if (mBufferQueue != null) {
             mBufferQueue.clear();
+            mBufferQueue = null;
         }
         mStarted = false;
         mStopping = false;
     }
 
     public void startTunerPlayer() {
+    Log.d(TAG, "Start tuner player & create av mediacodec callback");
         if (mStarted) {
             Log.d(TAG, "startLocalPlayer started already");
             return;
@@ -320,7 +338,7 @@ public class MediaCodecPlayer {
             mAudioMediaCodecCallback = new AudioMediaCodecCallback();
         }
         //setMediaFormat(mMediaFormat);
-        if (initTunerVideoMediaCodec(true) && initTunerAudioMediaCodec(true)) {
+        if (initTunerVideoMediaCodec(mIsPassthrough ? false : true) && initTunerAudioMediaCodec(mIsPassthrough ? false : true)) {
             startFixedTunerInAndOutListener();
             initTunerLinearBlock();
             startAudioMediaCodec();
@@ -329,25 +347,32 @@ public class MediaCodecPlayer {
     }
 
     public void stopTunerPlayer() {
+    Log.d(TAG, "Stop tuner player");
         if (!mStarted || mStopping) {
             Log.d(TAG, "startLocalPlayer started already");
             return;
         }
         mStopping = true;
         if (mMediaCodec != null) {
+            mMediaCodec.stop();
             mMediaCodec.release();
+            mMediaCodec = null;
         }
         if (mLinearInputBlock != null && mLinearInputBlock.block != null) {
             mLinearInputBlock.block.recycle();
+            mLinearInputBlock.block = null;
+            mLinearInputBlock = null;
         }
         if (mBufferQueue != null) {
             mBufferQueue.clear();
+            mBufferQueue = null;
         }
         mStarted = false;
         mStopping = false;
     }
 
     private void startFixedTunerInAndOutListener() {
+        Log.d(TAG, "New TunerInputSlotListener & SurfaceOutputSlotListener");
         List<Long> timestampList = Collections.synchronizedList(new ArrayList<Long>());
         mInputSlotListener = new TunerInputSlotListener.Builder()
                 .setMediaFormat(mMediaFormat)
@@ -360,6 +385,7 @@ public class MediaCodecPlayer {
         mOutputSlotListener = new SurfaceOutputSlotListener(timestampList, null);
         setExtractorInputSlotListener(mInputSlotListener);
         setExtractorOutputSlotListener(mOutputSlotListener);
+        Log.d(TAG, "setExtractorInputSlotListener & setExtractorOutputSlotListener");
     }
 
     public static final String STARTED = "started";
@@ -523,10 +549,10 @@ public class MediaCodecPlayer {
         Log.d(TAG, "initTunerVideoMediaCodec isGoogle = " + isGoogle);
         boolean result = true;
         //video
-        String[] codecs = getCodecNames(true, mMediaFormat);
+        String[] codecs = getCodecNames(isGoogle, mMediaFormat);
         if (codecs != null && codecs.length > 0) {
             try {
-                Log.d(TAG, "initTunerVideoMediaCodec codecs[0] = " + codecs[0]);
+                Log.d(TAG, "Create video mediacodec by codec name. codecs[0] = " + codecs[0]);
                 mMediaCodec = MediaCodec.createByCodecName(codecs[0]);
             } catch (Exception e) {
                 Log.d(TAG, "initTunerVideoMediaCodec video createByCodecName Exception = " + e.getMessage());
@@ -545,7 +571,7 @@ public class MediaCodecPlayer {
         String[] audioCodecs = getCodecNames(true, mAudioMediaFormat);
         if (audioCodecs != null && audioCodecs.length > 0) {
             try {
-                Log.d(TAG, "initTunerMediaCodec audioCodecs[0] = " + audioCodecs[0]);
+                Log.d(TAG, "Create audio mediacodec by codec name. audioCodecs[0] = " + audioCodecs[0]);
                 mAudioMediaCodec = MediaCodec.createByCodecName(audioCodecs[0]);
             } catch (Exception e) {
                 Log.d(TAG, "initTunerMediaCodec audio createByCodecName Exception = " + e.getMessage());
@@ -559,6 +585,7 @@ public class MediaCodecPlayer {
     }
 
     private void initLocalLinearBlock() {
+        Log.d(TAG, "initLocalLinearBlock->set mVideoMediaCodecCallback");
         mMediaCodec.setCallback(mVideoMediaCodecCallback);
         String[] codecNames = new String[]{ mMediaCodec.getName() };
         if (!mMediaCodec.getCodecInfo().isVendor() && mMediaCodec.getName().startsWith("c2.")) {
@@ -574,6 +601,7 @@ public class MediaCodecPlayer {
     }
 
     private void initTunerLinearBlock() {
+    Log.d(TAG, "Set video & audio mediacodec callback & new LinearInputBlock");
         mMediaCodec.setCallback(mVideoMediaCodecCallback);
         mAudioMediaCodec.setCallback(mAudioMediaCodecCallback);
         String[] codecNames = new String[]{ mMediaCodec.getName() };
@@ -585,7 +613,7 @@ public class MediaCodecPlayer {
     }
 
     private void startVideoMediaCodec() {
-        Log.d(TAG, "startMediaCodec mMediaFormat = " + mMediaFormat);
+        Log.d(TAG, "Start video MediaCodec mMediaFormat = " + mMediaFormat);
         //mMediaFormat = MediaFormat.createVideoFormat(MediaCodecPlayer.TEST_MIME_TYPE, 720, 576);
         mMediaCodec.configure(mMediaFormat, mSurface, null, MediaCodec.CONFIGURE_FLAG_USE_BLOCK_MODEL);
         mMediaCodec.start();
@@ -594,7 +622,7 @@ public class MediaCodecPlayer {
     private void startAudioMediaCodec() {
         //mAudioMediaFormat.setInteger(MediaFormat.KEY_AAC_PROFILE, AUDIO_AAC_PROFILE);
         //mAudioMediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, AUDIO_BIT_RATE);
-        Log.d(TAG, "startMediaCodec mAudioMediaFormat = " + mAudioMediaFormat);
+        Log.d(TAG, "Start audio MediaCodec mAudioMediaFormat = " + mAudioMediaFormat);
         mAudioMediaCodec.configure(mAudioMediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_USE_BLOCK_MODEL);
         mAudioMediaCodec.start();
     }
@@ -610,9 +638,14 @@ public class MediaCodecPlayer {
             if (codecInfo.isAlias()) {
                 continue;
             }
+            if (isAmlogic(codecInfo.getName())) {
+                if (isGoog)
+                    continue;
+            }
             if (isGoogle(codecInfo.getName()) != isGoog) {
                 continue;
             }
+
             for (MediaFormat format : formats) {
                 String mime = format.getString(MediaFormat.KEY_MIME);
 
@@ -682,14 +715,15 @@ public class MediaCodecPlayer {
             boolean eos = false;
             boolean signaledEos = false;
             SlotEvent event;
+            Log.d(TAG, "LocalMediaCodecRunnable startRun");
             while (mRunning) {
-                Log.d(TAG, "run... ...");
                 if (!WriteInputData(mLinearInputBlock.block, 0, 0, 0)) {
-                    Log.d(TAG, "run... ... interupt");
+                    Log.d(TAG, "WriteInputData... ... interupt");
                     break;
                 }
             }
             if (mRunning) {
+                Log.d(TAG, "LocalMediaCodec stop mPlayerMode:" + mPlayerMode);
                 switch (mPlayerMode) {
                     case PLAYER_MODE_LOCAL:
                         stopLocalPlayer();
@@ -772,8 +806,8 @@ public class MediaCodecPlayer {
                 Log.d(TAG, "onInputSlot getSampleTrackIndex = " + mExtractor.getSampleTrackIndex() + ", mSignaledEos = " + mSignaledEos);
                 return;
             }
-            Log.d(TAG, "onInputSlot index = " + index);
             long size = mExtractor.getSampleSize();
+            Log.d(TAG, "Extractor onInputSlot index = " + index + " getSampleSize:" + size);
             String[] codecNames = new String[]{ codec.getName() };
             if (mContentEncrypted) {
                 codecNames[0] = codecNames[0] + ".secure";
@@ -947,7 +981,7 @@ public class MediaCodecPlayer {
                 Log.d(TAG, "onInputSlot tSignaledEos = " + tSignaledEos);
                 return;
             }
-            Log.d(TAG, "onInputSlot index = " + index);
+            Log.d(TAG, "Tuner onInputSlot index = " + index + " tContentEncrypted:" + tContentEncrypted);
             String[] codecNames = new String[]{ codec.getName() };
             if (tContentEncrypted) {
                 codecNames[0] = codecNames[0] + ".secure";
@@ -983,8 +1017,14 @@ public class MediaCodecPlayer {
             Log.d(TAG, "onInputSlot timestampUs = " + timestampUs + ", input.offset = " + 0 + ", length = " + length + ", tSignaledEos = " + tSignaledEos);
             request.setFlags(tSignaledEos ? MediaCodec.BUFFER_FLAG_END_OF_STREAM : 0);
             request.queue();
-            //linearBlock.recycle();
-            //input.offset += length;
+
+          if (linearBlock.block != null) {
+              linearBlock.block.recycle();
+              linearBlock.block = null;
+              linearBlock = null;
+          }
+
+            //linearBlock.offset += length;
             if (tTimestampList != null) {
                 tTimestampList.add(timestampUs);
             }
@@ -1057,5 +1097,9 @@ public class MediaCodecPlayer {
             return Long.toString(timestampUs) + "us: changed keys=" + changedKeys
                     + " format=" + format;
         }
+    }
+
+    public interface onLicenseReceiveListener {
+        public void onLicenseReceive();
     }
 }

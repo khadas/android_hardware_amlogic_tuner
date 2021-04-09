@@ -18,7 +18,7 @@
         android:id="@+id/button_container"
         android:layout_width="0dp"
         android:layout_height="match_parent"
-        android:layout_margin="10dp"
+        android:layout_margin="5dp"
         android:layout_weight="1"
         android:gravity="center"
         android:orientation="vertical">
@@ -34,7 +34,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="frequency:" />
+                android:text="frequency:"/>
 
             <EditText
                 android:id="@+id/frequency"
@@ -45,7 +45,7 @@
                 android:gravity="center"
                 android:hint="Mhz"
                 android:inputType="number"
-                android:text="" />
+                android:text=""/>
         </LinearLayout>
 
         <LinearLayout
@@ -59,7 +59,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="video pid:" />
+                android:text="video pid:"/>
 
             <EditText
                 android:id="@+id/video_pid"
@@ -70,7 +70,7 @@
                 android:gravity="center"
                 android:hint="number"
                 android:inputType="number"
-                android:text="" />
+                android:text=""/>
         </LinearLayout>
 
         <LinearLayout
@@ -84,7 +84,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="audio_pid:" />
+                android:text="audio_pid:"/>
 
             <EditText
                 android:id="@+id/audio_pid"
@@ -95,7 +95,7 @@
                 android:gravity="center"
                 android:hint="number"
                 android:inputType="number"
-                android:text="" />
+                android:text=""/>
         </LinearLayout>
 
         <LinearLayout
@@ -109,7 +109,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="pcr_pid:" />
+                android:text="pcr_pid:"/>
 
             <EditText
                 android:id="@+id/pcr_pid"
@@ -120,7 +120,7 @@
                 android:gravity="center"
                 android:hint="number"
                 android:inputType="number"
-                android:text="" />
+                android:text=""/>
         </LinearLayout>
 
         <LinearLayout
@@ -130,59 +130,58 @@
             android:orientation="horizontal">
 
             <TextView
-                android:id="@+id/text_session_pid"
+                android:id="@+id/text_ts_file"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="section_pid:" />
+                android:text="ts_file:"/>
 
             <EditText
-                android:id="@+id/session_pid"
+                android:id="@+id/ts_file"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:ems="10"
                 android:gravity="center"
-                android:hint="number"
-                android:inputType="number"
-                android:text="" />
+                android:hint="text"
+                android:inputType="text"
+                android:text=""/>
         </LinearLayout>
 
         <Button
             android:id="@+id/search_start"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="search start" />
+            android:text="search start"/>
 
         <Button
             android:id="@+id/search_stop"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="search stop" />
+            android:text="search stop"/>
 
         <Button
             android:id="@+id/play_start"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="play start" />
+            android:text="play start"/>
 
         <Button
             android:id="@+id/play_stop"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="play stop" />
+            android:text="play stop"/>
 
         <Button
             android:id="@+id/local_play_start"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="local play start" />
+            android:text="local play start"/>
 
         <Button
             android:id="@+id/local_play_stop"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="local play stop" />
+            android:text="local play stop"/>
 
         <TextView
             android:id="@+id/status"
@@ -190,7 +189,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:gravity="center"
-            android:text="status" />
+            android:text="status"/>
 
     </LinearLayout>
 

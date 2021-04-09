@@ -35,31 +35,31 @@
 
 enum AM_DMX_ErrorCode
 {
-	AM_DMX_ERROR_BASE=AM_ERROR_BASE(AM_MOD_DMX),
-	AM_DMX_ERR_INVALID_DEV_NO,          /**< Invalid device number*/
-	AM_DMX_ERR_INVALID_ID,              /**< Invalid filer handle*/
-	AM_DMX_ERR_BUSY,                    /**< The device has already been openned*/
-	AM_DMX_ERR_NOT_ALLOCATED,           /**< The device has not been allocated*/
-	AM_DMX_ERR_CANNOT_CREATE_THREAD,    /**< Cannot create new thread*/
-	AM_DMX_ERR_CANNOT_OPEN_DEV,         /**< Cannot open device*/
-	AM_DMX_ERR_NOT_SUPPORTED,           /**< Not supported*/
-	AM_DMX_ERR_NO_FREE_FILTER,          /**< No free filter*/
-	AM_DMX_ERR_NO_MEM,                  /**< Not enough memory*/
-	AM_DMX_ERR_TIMEOUT,                 /**< Timeout*/
-	AM_DMX_ERR_SYS,                     /**< System error*/
-	AM_DMX_ERR_NO_DATA,                 /**< No data received*/
-	AM_DMX_ERR_END
+    AM_DMX_ERROR_BASE=AM_ERROR_BASE(AM_MOD_DMX),
+    AM_DMX_ERR_INVALID_DEV_NO,          /**< Invalid device number*/
+    AM_DMX_ERR_INVALID_ID,              /**< Invalid filer handle*/
+    AM_DMX_ERR_BUSY,                    /**< The device has already been openned*/
+    AM_DMX_ERR_NOT_ALLOCATED,           /**< The device has not been allocated*/
+    AM_DMX_ERR_CANNOT_CREATE_THREAD,    /**< Cannot create new thread*/
+    AM_DMX_ERR_CANNOT_OPEN_DEV,         /**< Cannot open device*/
+    AM_DMX_ERR_NOT_SUPPORTED,           /**< Not supported*/
+    AM_DMX_ERR_NO_FREE_FILTER,          /**< No free filter*/
+    AM_DMX_ERR_NO_MEM,                  /**< Not enough memory*/
+    AM_DMX_ERR_TIMEOUT,                 /**< Timeout*/
+    AM_DMX_ERR_SYS,                     /**< System error*/
+    AM_DMX_ERR_NO_DATA,                 /**< No data received*/
+    AM_DMX_ERR_END
 };
 
 /**\brief Input source of the demux*/
 typedef enum
 {
-	AM_DMX_SRC_TS0, 				   /**< TS input port 0*/
-	AM_DMX_SRC_TS1, 				   /**< TS input port 1*/
-	AM_DMX_SRC_TS2, 				   /**< TS input port 2*/
-	AM_DMX_SRC_TS3, 				   /**< TS input port 3*/
-	AM_DMX_SRC_HIU, 					/**< HIU input (memory)*/
-	AM_DMX_SRC_HIU1
+    AM_DMX_SRC_TS0,                    /**< TS input port 0*/
+    AM_DMX_SRC_TS1,                    /**< TS input port 1*/
+    AM_DMX_SRC_TS2,                    /**< TS input port 2*/
+    AM_DMX_SRC_TS3,                    /**< TS input port 3*/
+    AM_DMX_SRC_HIU,                     /**< HIU input (memory)*/
+    AM_DMX_SRC_HIU1
 } AM_DMX_Source_t;
 
 /**\brief 解复用设备*/
@@ -83,9 +83,9 @@ typedef void (*AM_DVR_DataCb) (void* device);
 struct AM_DMX_Filter {
     void *drv_data; /**< 驱动私有数据*/
     bool used;  /**< 此Filter是否已经分配*/
-    bool enable;	 /**< 此Filter设备是否使能*/
-    int id;		 /**< Filter ID*/
-    AM_DMX_DataCb cb; 	   /**< 解复用数据回调函数*/
+    bool enable;     /**< 此Filter设备是否使能*/
+    int id;      /**< Filter ID*/
+    AM_DMX_DataCb cb;      /**< 解复用数据回调函数*/
     unsigned int flags;
     void *user_data; /**< 数据回调函数用户参数*/
 };

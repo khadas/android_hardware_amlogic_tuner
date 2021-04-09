@@ -52,7 +52,8 @@ cc_defaults {
         "libsystemcontrolservice",
         "vendor.amlogic.hardware.systemcontrol@1.0",
         "vendor.amlogic.hardware.systemcontrol@1.1",
-    ],
+        "libsecmem",
+   ],
     header_libs: [
         "media_plugin_headers",
     ],
@@ -70,6 +71,9 @@ cc_defaults {
         "-Wno-deprecated-register",
     ],
 
+    cppflags: [
+       //"-DTUNERHAL_DBG",
+    ],
     include_dirs: [
        "hardware/amlogic/tuner/frontenddevices",
         "vendor/amlogic/common/prebuilt/dvb/ndk/include",

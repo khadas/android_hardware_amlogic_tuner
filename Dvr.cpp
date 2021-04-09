@@ -35,19 +35,22 @@ Dvr::Dvr(DvrType type, uint32_t bufferSize, const sp<IDvrCallback>& cb, sp<Demux
     mBufferSize = bufferSize;
     mCallback = cb;
     mDemux = demux;
+    ALOGD("%s/%d type:%d bufsize:%d MB", __FUNCTION__, __LINE__, (int)type, bufferSize/1024/1024);
 }
 
-Dvr::~Dvr() {}
+Dvr::~Dvr() {
+    ALOGD("%s/%d", __FUNCTION__, __LINE__);
+}
 
 Return<void> Dvr::getQueueDesc(getQueueDesc_cb _hidl_cb) {
-    ALOGV("%s", __FUNCTION__);
+    ALOGD("%s/%d", __FUNCTION__, __LINE__);
 
     _hidl_cb(Result::SUCCESS, *mDvrMQ->getDesc());
     return Void();
 }
 
 Return<Result> Dvr::configure(const DvrSettings& settings) {
-    ALOGV("%s", __FUNCTION__);
+    ALOGD("%s/%d", __FUNCTION__, __LINE__);
 
     mDvrSettings = settings;
     mDvrConfigured = true;
@@ -56,10 +59,9 @@ Return<Result> Dvr::configure(const DvrSettings& settings) {
 }
 
 Return<Result> Dvr::attachFilter(const sp<IFilter>& filter) {
-    ALOGV("%s", __FUNCTION__);
-
     uint32_t filterId;
     Result status;
+    ALOGD("%s/%d", __FUNCTION__, __LINE__);
 
     filter->getId([&](Result result, uint32_t id) {
         filterId = id;
@@ -79,10 +81,9 @@ Return<Result> Dvr::attachFilter(const sp<IFilter>& filter) {
 }
 
 Return<Result> Dvr::detachFilter(const sp<IFilter>& filter) {
-    ALOGV("%s", __FUNCTION__);
-
     uint32_t filterId;
     Result status;
+    ALOGD("%s/%d", __FUNCTION__, __LINE__);
 
     filter->getId([&](Result result, uint32_t id) {
         filterId = id;
@@ -101,7 +102,7 @@ Return<Result> Dvr::detachFilter(const sp<IFilter>& filter) {
 }
 
 Return<Result> Dvr::start() {
-    ALOGV("%s", __FUNCTION__);
+    ALOGD("%s/%d", __FUNCTION__, __LINE__);
 
     if (!mCallback) {
         return Result::NOT_INITIALIZED;
@@ -125,7 +126,7 @@ Return<Result> Dvr::start() {
 }
 
 Return<Result> Dvr::stop() {
-    ALOGV("%s", __FUNCTION__);
+    ALOGD("%s/%d", __FUNCTION__, __LINE__);
 
     mDvrThreadRunning = false;
 
@@ -138,7 +139,7 @@ Return<Result> Dvr::stop() {
 }
 
 Return<Result> Dvr::flush() {
-    ALOGV("%s", __FUNCTION__);
+    ALOGD("%s/%d", __FUNCTION__, __LINE__);
 
     mRecordStatus = RecordStatus::DATA_READY;
 
@@ -146,13 +147,15 @@ Return<Result> Dvr::flush() {
 }
 
 Return<Result> Dvr::close() {
-    ALOGV("%s", __FUNCTION__);
+    ALOGD("%s/%d", __FUNCTION__, __LINE__);
+    if (mDvrMQ.get() != NULL)
+       mDvrMQ.reset();
 
     return Result::SUCCESS;
 }
 
 bool Dvr::createDvrMQ() {
-    ALOGV("%s", __FUNCTION__);
+    ALOGD("%s/%d", __FUNCTION__, __LINE__);
 
     // Create a synchronized FMQ that supports blocking read/write
     std::unique_ptr<DvrMQ> tmpDvrMQ =
@@ -182,7 +185,7 @@ void* Dvr::__threadLoopPlayback(void* user) {
 }
 
 void Dvr::playbackThreadLoop() {
-    ALOGD("[Dvr] playback threadLoop start.");
+    ALOGI("[Dvr] playback threadLoop start.");
     std::lock_guard<std::mutex> lock(mDvrThreadLock);
     mDvrThreadRunning = true;
 
@@ -197,12 +200,10 @@ void Dvr::playbackThreadLoop() {
         }
         // Our current implementation filter the data and write it into the filter FMQ immediately
         // after the DATA_READY from the VTS/framework
-        if (!readPlaybackFMQ(true /*isVirtualFrontend*/, false /*isRecording*/) ||
-            !startFilterDispatcher(true /*isVirtualFrontend*/, false /*isRecording*/)) {
+        if (!readPlaybackFMQ(true /*isVirtualFrontend*/, false /*isRecording*/)) {
             ALOGE("[Dvr] playback data failed to be filtered. Ending thread");
             break;
         }
-
         maySendPlaybackStatusCallback();
     }
 
@@ -220,6 +221,9 @@ void Dvr::maySendPlaybackStatusCallback() {
                                                          mDvrSettings.playback().lowThreshold);
     if (mPlaybackStatus != newStatus) {
         mCallback->onPlaybackStatus(newStatus);
+        ALOGD("[Dvr] Playback status %d->%d [ar:%d aw:%d dvrmq size:%d highThreshold:%d lowThreshold:%d]",
+        mPlaybackStatus, newStatus, availableToRead/188, availableToWrite/188, mDvrMQ->getQuantumCount(),
+        mDvrSettings.playback().highThreshold/188, mDvrSettings.playback().lowThreshold/188);
         mPlaybackStatus = newStatus;
     }
 }
@@ -241,29 +245,42 @@ PlaybackStatus Dvr::checkPlaybackStatusChange(uint32_t availableToWrite, uint32_
 bool Dvr::readPlaybackFMQ(bool isVirtualFrontend, bool isRecording) {
     // Read playback data from the input FMQ
     int size = mDvrMQ->availableToRead();
-    int playbackPacketSize = mDvrSettings.playback().packetSize;
+    int playbackPacketSize = mDvrSettings.playback().packetSize;//188 bytes
     vector<uint8_t> dataOutputBuffer;
     dataOutputBuffer.resize(playbackPacketSize);
     // Dispatch the packet to the PID matching filter output buffer
     for (int i = 0; i < size / playbackPacketSize; i++) {
         if (!mDvrMQ->read(dataOutputBuffer.data(), playbackPacketSize)) {
+            ALOGE("%s read ts from mDvrMQ failed!", __FUNCTION__);
             return false;
         }
+        if (DEBUG_DVR)
+            ALOGD("%s isVirtualFrontend:%d isRecording:%d", __FUNCTION__, isVirtualFrontend, isRecording);
         if (isVirtualFrontend) {
             if (isRecording) {
                 mDemux->sendFrontendInputToRecord(dataOutputBuffer);
             } else {
-                mDemux->startBroadcastTsFilter(dataOutputBuffer);
+                mDemux->startBroadcastTsFilter(dataOutputBuffer);//AM_DMX_WriteTs
             }
         } else {
             startTpidFilter(dataOutputBuffer);
         }
     }
 
+#ifdef TUNERHAL_DBG
+    mDvrReadDataSize += size;
+    if (mInjectDvrTotalLen != mDvrReadDataSize/1024/1024) {
+        mInjectDvrTotalLen = mDvrReadDataSize/1024/1024;
+        ALOGD("mDvrMQ availableToRead size:%d total size:%d MB", size, mInjectDvrTotalLen);
+    }
+#endif
+
     return true;
 }
 
 void Dvr::startTpidFilter(vector<uint8_t> data) {
+    ALOGV("%s data size:%d", __FUNCTION__, data.size());
+
     std::map<uint32_t, sp<IFilter>>::iterator it;
     for (it = mFilters.begin(); it != mFilters.end(); it++) {
         uint16_t pid = ((data[1] & 0x1f) << 8) | ((data[2] & 0xff));
@@ -276,11 +293,16 @@ void Dvr::startTpidFilter(vector<uint8_t> data) {
     }
 }
 
+//startFilterDispatcher->startBroadcastFilterDispatcher->startFilterHandler
 bool Dvr::startFilterDispatcher(bool isVirtualFrontend, bool isRecording) {
+    if (DEBUG_DVR)
+        ALOGD("%s/%d isVirtualFrontend:%d isRecording:%d", __FUNCTION__, __LINE__, isVirtualFrontend, isRecording);
+
     if (isVirtualFrontend) {
         if (isRecording) {
             return mDemux->startRecordFilterDispatcher();
         } else {
+            ALOGV("%s/%d ->startBroadcastFilterDispatcher", __FUNCTION__, __LINE__);
             return mDemux->startBroadcastFilterDispatcher();
         }
     }
@@ -298,6 +320,7 @@ bool Dvr::startFilterDispatcher(bool isVirtualFrontend, bool isRecording) {
 
 bool Dvr::writeRecordFMQ(const std::vector<uint8_t>& data) {
     std::lock_guard<std::mutex> lock(mWriteLock);
+    ALOGD("%s/%d", __FUNCTION__, __LINE__);
     if (mRecordStatus == RecordStatus::OVERFLOW) {
         ALOGD("[Dvr] stops writing and wait for the client side flushing.");
         return true;
@@ -338,11 +361,13 @@ RecordStatus Dvr::checkRecordStatusChange(uint32_t availableToWrite, uint32_t av
 }
 
 bool Dvr::addPlaybackFilter(uint32_t filterId, sp<IFilter> filter) {
+    ALOGD("%s/%d", __FUNCTION__, __LINE__);
     mFilters[filterId] = filter;
     return true;
 }
 
 bool Dvr::removePlaybackFilter(uint32_t filterId) {
+    ALOGD("%s/%d", __FUNCTION__, __LINE__);
     mFilters.erase(filterId);
     return true;
 }

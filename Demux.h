@@ -85,7 +85,6 @@ class Demux : public IDemux {
     virtual Return<Result> disconnectCiCam() override;
     static void postData(void* demux, int fid, bool esOutput, bool passthrough);
     static void postDvrData(void* demux);
-    bool getLocalPlayerStatus();
 
     // Functions interacts with Tuner Service
     void stopFrontendInput();
@@ -207,6 +206,8 @@ class Demux : public IDemux {
     vector<uint8_t> mPesOutput;
     sp<AM_DMX_Device> AmDmxDevice;
     const bool DEBUG_DEMUX = false;
+    bool mDvrOpened;
+    int mEnablePassthrough = 0;
 };
 
 }  // namespace implementation

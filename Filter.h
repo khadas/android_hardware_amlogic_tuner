@@ -92,6 +92,9 @@ class Filter : public IFilter {
     bool isMediaFilter() { return mIsMediaFilter; };
     bool isPcrFilter() { return mIsPcrFilter; };
     bool isRecordFilter() { return mIsRecordFilter; };
+    void fillDataToDecoder();
+    void setFilterIdx(uint32_t idx);
+    uint32_t getFilterIdx();
 
   private:
     // Tuner service
@@ -104,6 +107,7 @@ class Filter : public IFilter {
     sp<IFilterCallback> mCallback;
 
     uint32_t mFilterId;
+    uint32_t mFilterIdx;
     uint32_t mBufferSize;
     DemuxFilterType mType;
     bool mIsMediaFilter = false;
@@ -139,7 +143,10 @@ class Filter : public IFilter {
     const uint16_t SECTION_WRITE_COUNT = 10;
 
     bool DEBUG_FILTER = false;
-
+#ifdef TUNERHAL_DBG
+    int mFilterEventSize;
+    int mVideoFilterSize;
+#endif
     /**
      * Filter handlers to handle the data filtering.
      * They are also responsible to write the filtered output into the filter FMQ

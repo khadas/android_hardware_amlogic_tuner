@@ -97,7 +97,7 @@ Tuner::Tuner() {
 Tuner::~Tuner() {}
 
 Return<void> Tuner::getFrontendIds(getFrontendIds_cb _hidl_cb) {
-    ALOGV("%s", __FUNCTION__);
+    ALOGV("%s/%d", __FUNCTION__, __LINE__);
 
     vector<FrontendId> frontendIds;
     frontendIds.resize(mFrontendSize);
@@ -110,7 +110,7 @@ Return<void> Tuner::getFrontendIds(getFrontendIds_cb _hidl_cb) {
 }
 
 Return<void> Tuner::openFrontendById(uint32_t frontendId, openFrontendById_cb _hidl_cb) {
-    ALOGV("%s", __FUNCTION__);
+    ALOGV("%s/%d", __FUNCTION__, __LINE__);
 
     if (frontendId >= mFrontendSize || frontendId < 0) {
         ALOGW("[   WARN   ] Frontend with id %d isn't available", frontendId);
@@ -123,22 +123,23 @@ Return<void> Tuner::openFrontendById(uint32_t frontendId, openFrontendById_cb _h
 }
 
 Return<void> Tuner::openDemux(openDemux_cb _hidl_cb) {
-    ALOGV("%s", __FUNCTION__);
+    ALOGV("%s/%d", __FUNCTION__, __LINE__);
 
+    if (mLastUsedId == 3)
+        mLastUsedId = -1;
     DemuxId demuxId = mLastUsedId + 1;
-    mLastUsedId += 1;
     sp<Demux> demux = new Demux(demuxId, this);
     mDemuxes[demuxId] = demux;
+    mLastUsedId += 1;
 
     _hidl_cb(Result::SUCCESS, demuxId, demux);
     return Void();
 }
 
 Return<void> Tuner::getDemuxCaps(getDemuxCaps_cb _hidl_cb) {
-    ALOGV("%s", __FUNCTION__);
+    ALOGV("%s/%d", __FUNCTION__, __LINE__);
 
     DemuxCapabilities caps;
-
     // IP filter can be an MMTP filter's data source.
     caps.linkCaps = {0x00, 0x00, 0x02, 0x00, 0x00};
     _hidl_cb(Result::SUCCESS, caps);
@@ -146,18 +147,22 @@ Return<void> Tuner::getDemuxCaps(getDemuxCaps_cb _hidl_cb) {
 }
 
 Return<void> Tuner::openDescrambler(openDescrambler_cb _hidl_cb) {
-    ALOGV("%s", __FUNCTION__);
+    ALOGV("%s/%d", __FUNCTION__, __LINE__);
 
-    uint32_t descramblerId = ++mLastUsedDescramblerId;
+    if (mLastUsedDescramblerId == 3)
+        mLastUsedDescramblerId = -1;
+
+    uint32_t descramblerId = mLastUsedDescramblerId + 1;
     sp<Descrambler> descrambler = new Descrambler(descramblerId, this);
     mDescramblers[descramblerId] = descrambler;
+    mLastUsedDescramblerId += 1;
 
     _hidl_cb(Result::SUCCESS, descrambler);
     return Void();
 }
 
 Return<void> Tuner::getFrontendInfo(FrontendId frontendId, getFrontendInfo_cb _hidl_cb) {
-    ALOGV("%s", __FUNCTION__);
+    ALOGV("%s/%d", __FUNCTION__, __LINE__);
 
     FrontendInfo info;
     if (frontendId >= mFrontendSize) {
@@ -192,7 +197,7 @@ Return<void> Tuner::getFrontendInfo(FrontendId frontendId, getFrontendInfo_cb _h
 }
 
 Return<void> Tuner::getLnbIds(getLnbIds_cb _hidl_cb) {
-    ALOGV("%s", __FUNCTION__);
+    ALOGV("%s/%d", __FUNCTION__, __LINE__);
 
     vector<LnbId> lnbIds;
     lnbIds.resize(mLnbs.size());
@@ -205,7 +210,7 @@ Return<void> Tuner::getLnbIds(getLnbIds_cb _hidl_cb) {
 }
 
 Return<void> Tuner::openLnbById(LnbId lnbId, openLnbById_cb _hidl_cb) {
-    ALOGV("%s", __FUNCTION__);
+    ALOGV("%s/%d", __FUNCTION__, __LINE__);
 
     if (lnbId >= mLnbs.size()) {
         _hidl_cb(Result::INVALID_ARGUMENT, nullptr);
@@ -217,13 +222,13 @@ Return<void> Tuner::openLnbById(LnbId lnbId, openLnbById_cb _hidl_cb) {
 }
 
 sp<Frontend> Tuner::getFrontendById(uint32_t frontendId) {
-    ALOGV("%s", __FUNCTION__);
+    ALOGV("%s/%d", __FUNCTION__, __LINE__);
 
     return mFrontends[frontendId];
 }
 
 Return<void> Tuner::openLnbByName(const hidl_string& /*lnbName*/, openLnbByName_cb _hidl_cb) {
-    ALOGV("%s", __FUNCTION__);
+    ALOGV("%s/%d", __FUNCTION__, __LINE__);
 
     sp<ILnb> lnb = new Lnb();
 
@@ -232,6 +237,8 @@ Return<void> Tuner::openLnbByName(const hidl_string& /*lnbName*/, openLnbByName_
 }
 
 void Tuner::setFrontendAsDemuxSource(uint32_t frontendId, uint32_t demuxId) {
+    ALOGV("%s/%d", __FUNCTION__, __LINE__);
+
     mFrontendToDemux[frontendId] = demuxId;
     if (mFrontends[frontendId] != nullptr && mFrontends[frontendId]->isLocked()) {
         mDemuxes[demuxId]->startFrontendInputLoop();
@@ -239,6 +246,8 @@ void Tuner::setFrontendAsDemuxSource(uint32_t frontendId, uint32_t demuxId) {
 }
 
 void Tuner::frontendStopTune(uint32_t frontendId) {
+    ALOGV("%s/%d", __FUNCTION__, __LINE__);
+
     map<uint32_t, uint32_t>::iterator it = mFrontendToDemux.find(frontendId);
     uint32_t demuxId;
     if (it != mFrontendToDemux.end()) {
@@ -248,6 +257,8 @@ void Tuner::frontendStopTune(uint32_t frontendId) {
 }
 
 void Tuner::frontendStartTune(uint32_t frontendId) {
+    ALOGV("%s/%d", __FUNCTION__, __LINE__);
+
     map<uint32_t, uint32_t>::iterator it = mFrontendToDemux.find(frontendId);
     uint32_t demuxId;
     if (it != mFrontendToDemux.end()) {
@@ -258,6 +269,8 @@ void Tuner::frontendStartTune(uint32_t frontendId) {
 
 void Tuner::attachDescramblerToDemux(uint32_t descramblerId,
                                      uint32_t demuxId) const {
+  ALOGV("%s/%d", __FUNCTION__, __LINE__);
+
   if (mDescramblers.find(descramblerId) != mDescramblers.end()
       && mDemuxes.find(demuxId) != mDemuxes.end()) {
     mDemuxes.at(demuxId)->attachDescrambler(descramblerId,
@@ -267,6 +280,8 @@ void Tuner::attachDescramblerToDemux(uint32_t descramblerId,
 
 void Tuner::detachDescramblerFromDemux(uint32_t descramblerId,
                                        uint32_t demuxId) const {
+  ALOGV("%s/%d", __FUNCTION__, __LINE__);
+
   if (mDescramblers.find(descramblerId) != mDescramblers.end()
       && mDemuxes.find(demuxId) != mDemuxes.end()) {
     mDemuxes.at(demuxId)->detachDescrambler(descramblerId);

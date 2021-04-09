@@ -32,6 +32,11 @@ namespace tuner {
 namespace V1_0 {
 namespace implementation {
 
+#define MAX_CHANNEL_NUM 2
+#define VIDEO_CHANNEL_INDEX 0
+#define AUDIO_CHANNEL_INDEX 1
+#define INVALID_CAS_SESSION_ID -1
+
 using ::android::hardware::kSynchronizedReadWrite;
 using ::android::hardware::MessageQueue;
 using DvrMQ = MessageQueue<uint8_t, kSynchronizedReadWrite>;
@@ -62,16 +67,14 @@ class Descrambler : public IDescrambler {
 
   uint32_t mDescramblerId;
   sp<Tuner> mTunerService;
-
   // Transport stream pid only.
   std::set<uint16_t> added_pid;
-
   uint32_t mSourceDemuxId;
   bool mDemuxSet = false;
-
   std::mutex mDescrambleLock;
-
-  uint32_t mSessionId;
+  void *mDscCtx = nullptr;
+  uint32_t mCasSessionId[MAX_CHANNEL_NUM];
+  bool mAVBothEcm;
 };
 
 }  // namespace implementation
