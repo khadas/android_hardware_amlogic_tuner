@@ -76,7 +76,7 @@ cc_defaults {
     ],
     include_dirs: [
        "hardware/amlogic/tuner/frontenddevices",
-        "vendor/amlogic/common/prebuilt/dvb/ndk/include",
+        "vendor/amlogic/common/external/dvb/android/ndk/include",
         "vendor/amlogic/common/frameworks/services/systemcontrol",
         "vendor/amlogic/common/frameworks/services/systemcontrol/PQ/include",
     ],
