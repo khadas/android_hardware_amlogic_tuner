@@ -49,6 +49,7 @@ AM_ErrorCode_t AM_DMX_Device::dmx_dvr_open(dmx_input_source_t inputSource) {
 
     AM_ErrorCode_t ret = drv->dvr_open(this,inputSource);
     if (ret == AM_SUCCESS) {
+        /*
         pthread_mutex_init(&dvr_lock, NULL);
         pthread_cond_init(&dvr_cond, NULL);
         enable_dvr_thread = true;
@@ -56,7 +57,7 @@ AM_ErrorCode_t AM_DMX_Device::dmx_dvr_open(dmx_input_source_t inputSource) {
             pthread_mutex_destroy(&dvr_lock);
             pthread_cond_destroy(&dvr_cond);
             ret = AM_DMX_ERR_CANNOT_CREATE_THREAD;
-        }
+        }*/
     }
     return ret;
 }
