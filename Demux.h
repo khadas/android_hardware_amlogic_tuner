@@ -29,7 +29,7 @@
 #include "Tuner.h"
 //#include "AmHwMultiDemuxWrapper.h"
 #include "AmDmx.h"
-
+#include "MediaSyncWrap.h"
 using namespace std;
 
 namespace android {
@@ -208,6 +208,7 @@ class Demux : public IDemux {
     const bool DEBUG_DEMUX = false;
     bool mDvrOpened;
     int mEnablePassthrough = 0;
+    sp<MediaSyncWrap> mMediaSyncWrap;
 };
 
 }  // namespace implementation

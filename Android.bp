@@ -25,6 +25,7 @@ cc_defaults {
         "utils/FileSystemIo.cpp",
         "MultiHwDemux/AmDmx.cpp",
         "MultiHwDemux/AmLinuxDvb.cpp",
+        "mediasync/MediaSyncWrap.cpp",
         "Filter.cpp",
         "Frontend.cpp",
         "Descrambler.cpp",
@@ -55,6 +56,7 @@ cc_defaults {
         "vendor.amlogic.hardware.systemcontrol@1.1",
         "libsecmem",
         "libjsoncpp",
+        "libmediahal_mediasync",
    ],
     header_libs: [
         "media_plugin_headers",
@@ -62,6 +64,7 @@ cc_defaults {
 
     local_include_dirs: [
         "MultiHwDemux",
+        "mediasync",
         "utils",
     ],
 

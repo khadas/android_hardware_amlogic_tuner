@@ -51,17 +51,18 @@ Demux::Demux(uint32_t demuxId, sp<Tuner> tuner) {
     mFilterOutputTotalLen = 0;
     mDropTsPktNum = property_get_int32(TF_DEBUG_DROP_TS_NUM, 0);
     mDumpEsData = property_get_int32(TF_DEBUG_DUMP_ES_DATA, 0);
-    mSupportLocalPlayer = property_get_int32(TF_DEBUG_ENABLE_LOCAL_PLAY, 1);
-    ALOGD("mDropLen:%d mFilterOutputTotalLen:%d mDropTsPktNum:%d mDumpEsData:%d mSupportLocalPlayer:%d",
-        mDropLen, mFilterOutputTotalLen, mDropTsPktNum, mDumpEsData, mSupportLocalPlayer);
+    ALOGD("mDropLen:%d mFilterOutputTotalLen:%d mDropTsPktNum:%d mDumpEsData:%d",
+        mDropLen, mFilterOutputTotalLen, mDropTsPktNum, mDumpEsData);
 #endif
+    mSupportLocalPlayer = property_get_int32(TF_DEBUG_ENABLE_LOCAL_PLAY, 1);
     mEnablePassthrough = property_get_int32(TF_DEBUG_ENABLE_PASSTHROUGH, 0);
     AmDmxDevice = new AM_DMX_Device();
     AmDmxDevice->dev_no = demuxId;
-    ALOGD("mDemuxId:%d mEnablePassthrough:%d", mDemuxId, mEnablePassthrough);
+    ALOGD("mDemuxId:%d mEnablePassthrough:%d, mSupportLocalPlayer = %d", mDemuxId, mEnablePassthrough, mSupportLocalPlayer);
     if (mEnablePassthrough == 0) {
         AmDmxDevice->AM_DMX_Open();
     }
+    mMediaSyncWrap = new MediaSyncWrap();
 }
 
 Demux::~Demux() {
@@ -308,7 +309,9 @@ Return<void> Demux::getAvSyncHwId(const sp<IFilter>& filter, getAvSyncHwId_cb _h
 
     if (!mPcrFilterIds.empty()) {
         // Return the lowest pcr filter id in the default implementation as the av sync id
-        _hidl_cb(Result::SUCCESS, *mPcrFilterIds.begin());
+        uint16_t pcrPid = getFilterTpid(*mPcrFilterIds.begin());
+        avSyncHwId = mMediaSyncWrap->getAvSyncHwId(mDemuxId, pcrPid);
+        _hidl_cb(Result::SUCCESS, avSyncHwId);
         return Void();
     }
 

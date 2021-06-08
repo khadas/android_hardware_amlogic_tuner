@@ -44,7 +44,6 @@ Filter::Filter(DemuxFilterType type, uint32_t filterId, uint32_t bufferSize,
     mCallback = cb;
     mDemux = demux;
     mFilterIdx = -1;
-
 #ifdef TUNERHAL_DBG
     mFilterEventSize = property_get_int32(TF_FILTER_PROP_EVENTSIZE, 10);
     mFilterEventSize *= 1024 * 1024;
@@ -163,7 +162,6 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
                           .section().condition.sectionBits().mask.size() * sizeof(uint8_t));
                     }
 
-                    
                     if (settings.ts().filterSettings.section().condition.sectionBits().mode.size() < DMX_FILTER_SIZE) {
                         memcpy(param.filter.mode, settings.ts().filterSettings
                           .section().condition.sectionBits().mode.data(), settings.ts().filterSettings
@@ -178,52 +176,63 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
                 }
                 case DemuxTsFilterType::AUDIO: {
                     ALOGD("%s DemuxTsFilterType::AUDIO", __FUNCTION__);
-                    struct dmx_pes_filter_params aparam;
-                    if (mDemux->getAmDmxDevice()
-                        ->AM_DMX_SetBufferSize(mFilterIdx, mBufferSize) != 0 ) {
-                        return Result::UNAVAILABLE;
-                    }
-                    memset(&aparam, 0, sizeof(aparam));
-                    aparam.pid = mTpid;
-                    aparam.pes_type = DMX_PES_AUDIO0;
-                    aparam.input = DMX_IN_FRONTEND;
-                    aparam.output = DMX_OUT_TAP;
-                    aparam.flags = 0;
-                    aparam.flags |= DMX_ES_OUTPUT;
-                    if (settings.ts().filterSettings.av().isPassthrough)
-                        aparam.flags |= DMX_OUTPUT_RAW_MODE;
-                    if (mDemux->getAmDmxDevice()
-                        ->AM_DMX_SetPesFilter(mFilterIdx, &aparam) != 0 ) {
-                        return Result::UNAVAILABLE;
+                    if (settings.ts().filterSettings.av().isPassthrough) {
+                        //aparam.flags |= DMX_OUTPUT_RAW_MODE;
+                        // for passthrough mode, will set pes filter in media hal
+                        uint32_t dmxId = mDemux->getAmDmxDevice()->dev_no;
+                        mFilterId      = (dmxId << 16) | (uint32_t)(mTpid);
+                        ALOGD("audio filter id = %d", mFilterId);
+                    } else {
+                        struct dmx_pes_filter_params aparam;
+                        memset(&aparam, 0, sizeof(aparam));
+                        aparam.pid = mTpid;
+                        aparam.pes_type = DMX_PES_AUDIO0;
+                        aparam.input = DMX_IN_FRONTEND;
+                        aparam.output = DMX_OUT_TAP;
+                        aparam.flags = 0;
+                        aparam.flags |= DMX_ES_OUTPUT;
+                        if (mDemux->getAmDmxDevice()
+                            ->AM_DMX_SetBufferSize(mFilterIdx, mBufferSize) != 0 ) {
+                            return Result::UNAVAILABLE;
+                        }
+                        if (mDemux->getAmDmxDevice()
+                            ->AM_DMX_SetPesFilter(mFilterIdx, &aparam) != 0 ) {
+                            return Result::UNAVAILABLE;
+                        }
                     }
                     break;
                 }
                 case DemuxTsFilterType::VIDEO: {
-                    int buffSize = 0;
                     ALOGD("%s DemuxTsFilterType::VIDEO mTpid:0x%x", __FUNCTION__, mTpid);
-                    struct dmx_pes_filter_params vparam;
-                    vparam.pid = mTpid;
-                    vparam.pes_type = DMX_PES_VIDEO0;
-                    vparam.input = DMX_IN_FRONTEND;
-                    vparam.output = DMX_OUT_TAP;
-                    vparam.flags = 0;
-                    vparam.flags |= DMX_ES_OUTPUT;
-#ifdef TUNERHAL_DBG
-                    buffSize = mVideoFilterSize;
-#else
-                    buffSize = mBufferSize;
-#endif
                     if (settings.ts().filterSettings.av().isPassthrough) {
-                        vparam.flags |= DMX_OUTPUT_RAW_MODE;
-                    }
-                    ALOGD("%s DemuxTsFilterType::VIDEO AM_DMX_SetBufferSize:%d MB", __FUNCTION__, buffSize/1024/1024);
-                    if (mDemux->getAmDmxDevice()
-                        ->AM_DMX_SetBufferSize(mFilterIdx, buffSize) != 0 ) {
-                        return Result::UNAVAILABLE;
-                    }
-                    if (mDemux->getAmDmxDevice()
-                        ->AM_DMX_SetPesFilter(mFilterIdx, &vparam) != 0 ) {
-                        return Result::UNAVAILABLE;
+                        //vparam.flags |= DMX_OUTPUT_RAW_MODE;
+                        // for passthrough mode, will set pes filter in media hal
+                        uint32_t dmxId = mDemux->getAmDmxDevice()->dev_no;
+                        mFilterId      = (dmxId << 16) | (uint32_t)(mTpid);
+                        ALOGD("video filter id = %d", mFilterId);
+                    } else {
+                        int buffSize = 0;
+                        struct dmx_pes_filter_params vparam;
+                        vparam.pid = mTpid;
+                        vparam.pes_type = DMX_PES_VIDEO0;
+                        vparam.input = DMX_IN_FRONTEND;
+                        vparam.output = DMX_OUT_TAP;
+                        vparam.flags = 0;
+                        vparam.flags |= DMX_ES_OUTPUT;
+#ifdef TUNERHAL_DBG
+                        buffSize = mVideoFilterSize;
+#else
+                        buffSize = mBufferSize;
+#endif
+                        ALOGD("%s DemuxTsFilterType::VIDEO AM_DMX_SetBufferSize:%d MB", __FUNCTION__, buffSize/1024/1024);
+                        if (mDemux->getAmDmxDevice()
+                            ->AM_DMX_SetBufferSize(mFilterIdx, buffSize) != 0 ) {
+                            return Result::UNAVAILABLE;
+                        }
+                        if (mDemux->getAmDmxDevice()
+                            ->AM_DMX_SetPesFilter(mFilterIdx, &vparam) != 0 ) {
+                            return Result::UNAVAILABLE;
+                        }
                     }
                     break;
                 }
@@ -240,8 +249,11 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
                         return Result::UNAVAILABLE;
                     }
                     ALOGD("stream(pid = %d) start recording, filter = %d", mTpid, mFilterId);
+                    break;
                 }
-                break;
+                case DemuxTsFilterType::PCR: {
+                    break;
+                }
                 default:
                     break;
             }
@@ -279,7 +291,6 @@ Return<Result> Filter::stop() {
     mFilterThreadRunning = false;
 
     std::lock_guard<std::mutex> lock(mFilterThreadLock);
-
     return Result::SUCCESS;
 }
 
