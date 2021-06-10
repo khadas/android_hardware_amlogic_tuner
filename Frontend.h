@@ -74,7 +74,7 @@ class Frontend : public IFrontend {
     bool isLocked();
 
     void sendScanCallBack(uint32_t freq, bool isLocked, bool isEnd);
-    void sendEventCallBack(bool isLocked);
+    void sendEventCallBack(FrontendEventType locked);
 
   private:
     virtual ~Frontend();

@@ -292,11 +292,12 @@ void Frontend::sendScanCallBack(uint32_t freq, bool isLocked, bool isEnd) {
     mCallback->onScanMessage(FrontendScanMessageType::FREQUENCY, msg);
 }
 
-void Frontend::sendEventCallBack(bool isLocked) {
-    if (mIsLocked != isLocked) {
-        mIsLocked = isLocked;
-        mIsLocked ? mCallback->onEvent(FrontendEventType::LOCKED):
-                    mCallback->onEvent(FrontendEventType::LOST_LOCK);
+void Frontend::sendEventCallBack(FrontendEventType locked) {
+    mCallback->onEvent(locked);
+    if (locked == FrontendEventType::LOCKED) {
+      mIsLocked = true;
+    } else {
+      mIsLocked = false;
     }
 }
 

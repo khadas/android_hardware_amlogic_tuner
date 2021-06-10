@@ -2179,12 +2179,14 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
             Log.d(TAG, "tuner status is lock");
             if (mTuner != null && !mSupportMediaCas) {
                 mVideoFilter = openVideoFilter(vpid);
-				mVideoFilter.start();
+                mVideoFilter.start();
                 mAudioFilter = openAudioFilter(apid);
-//				mAudioFilter.start();
+                //mAudioFilter.start();
             }
+        } else if (tuneEvent == 1) {
+            Log.d(TAG, "tuner got no signal");
         } else if (tuneEvent == 2) {
-            Log.d(TAG, "tuner lock time out");
+            Log.d(TAG, "tuner lost lock");
         }
     }
 

@@ -314,20 +314,30 @@ bool FrontendDevice::threadLoop() {
         }
         if (fe_event.status != 0) {
             bool locked = ((fe_event.status & FE_HAS_LOCK) !=0);
-            ALOGD("%s: get fe event: 0x%02x", __FUNCTION__, fe_event.status);
+            ALOGD("%s: get fe event: 0x%02x, locked=%d, dev_locked=%d", __FUNCTION__, fe_event.status, locked, mDev.islocked);
             if (state == STATE_SCAN_START) {
                 ALOGD("%s: send scan event.", __FUNCTION__);
+                mDev.islocked = locked;
                 mContext->sendScanCallBack(mDev.tuneFreq, locked, false);
                 updateThreadState(FrontendDevice::STATE_STOP);
             } else if (state == STATE_TUNE_START) {
                 ALOGD("%s: send tune event.", __FUNCTION__);
+                mDev.islocked = locked;
                 updateThreadState(FrontendDevice::STATE_TUNE_IDLE);
-                mContext->sendEventCallBack(locked);
+                if (locked) {
+                  mContext->sendEventCallBack(FrontendEventType::LOCKED);
+                } else {
+                  mContext->sendEventCallBack(FrontendEventType::NO_SIGNAL);
+                }
             } else {
                 if (locked != mDev.islocked) {
                     ALOGD("%s: send evt changed.", __FUNCTION__);
-                    mContext->sendEventCallBack(locked);
                     mDev.islocked = locked;
+                    if (locked) {
+                        mContext->sendEventCallBack(FrontendEventType::LOCKED);
+                    } else {
+                        mContext->sendEventCallBack(FrontendEventType::LOST_LOCK);
+                    }
                 }
             }
         }
