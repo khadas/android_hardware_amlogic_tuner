@@ -41,6 +41,7 @@ import android.media.MediaFormat;
 import android.media.tv.tuner.filter.TsRecordEvent;
 import android.media.tv.tuner.dvr.DvrRecorder;
 import android.media.tv.tuner.filter.RecordSettings;
+import android.media.tv.tuner.filter.SectionSettingsWithSectionBits;
 
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -1083,7 +1084,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                 } else if (event instanceof SectionEvent) {
                     SectionEvent sectionEvent = (SectionEvent) event;
                     if (mDebugTsSection)
-                        Log.d(TAG, "Receive section data, size=" + sectionEvent.getDataLength());
+                        Log.d(TAG, "Receive section data, size=" + sectionEvent.getDataLength() + "version =" + sectionEvent.getVersion() + "sectionNum =" + sectionEvent.getSectionNumber());
                     byte[] data = new byte[188];
                     if (filter != null) {
                         filter.read(data, 0, sectionEvent.getDataLength());
@@ -1813,13 +1814,25 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
             return;
         }
         byte tableId = (byte)(tid & 0xff);
+        /*
         Settings settings = SectionSettingsWithTableInfo
         .builder(Filter.TYPE_TS)
         .setTableId(tableId)
         .setCrcEnabled(true)
         .setRaw(false)
         .setRepeat(false)
-        .build();
+        .build();*/
+        byte mask = (byte)255;
+        SectionSettingsWithSectionBits settings =
+        SectionSettingsWithSectionBits
+                .builder(Filter.TYPE_TS)
+                .setCrcEnabled(true)
+                .setRepeat(false)
+                .setRaw(false)
+                .setFilter(new byte[]{tableId, 0, 0})
+                .setMask(new byte[]{mask, 0, 0, 0})
+                .setMode(new byte[]{0, 0, 0})
+                .build();
         FilterConfiguration config = TsFilterConfiguration
         .builder()
         .setTpid(pid)
@@ -1862,13 +1875,25 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
             return;
         }
         byte tableId = (byte)(tid & 0xff);
+        /*
         Settings settings = SectionSettingsWithTableInfo
         .builder(Filter.TYPE_TS)
         .setTableId(tableId)
         .setCrcEnabled(false)
         .setRaw(false)
         .setRepeat(false)
-        .build();
+        .build();*/
+        byte mask = (byte)255;
+        SectionSettingsWithSectionBits settings =
+        SectionSettingsWithSectionBits
+                .builder(Filter.TYPE_TS)
+                .setCrcEnabled(true)
+                .setRepeat(false)
+                .setRaw(false)
+                .setFilter(new byte[]{tableId, 0, 0})
+                .setMask(new byte[]{mask, 0, 0, 0})
+                .setMode(new byte[]{0, 0, 0})
+                .build();
         FilterConfiguration config = TsFilterConfiguration
         .builder()
         .setTpid(pid)
@@ -2166,12 +2191,20 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     public void onTuneEvent(int tuneEvent) {
         Log.d(TAG, "onTuneEvent event: " + tuneEvent);
         mUiHandler.sendMessage(mUiHandler.obtainMessage(UI_MSG_STATUS, "Got lock event: " + tuneEvent));
-        int vpid = Integer.parseInt(mVideoPid.getText().toString());
-        int apid = Integer.parseInt(mAudioPid.getText().toString());
+        int vpid = -1;
+        int apid = -1;
+        String strVideoPid = mVideoPid.getText().toString();
+        if (strVideoPid != null &&  !strVideoPid.equals("")) {
+            vpid = Integer.parseInt(strVideoPid);
+        }
+
         if (mCurrentProgram != null && mCurrentProgram.videoPid != 0) {
             vpid= mCurrentProgram.videoPid;
         }
-
+        String strAudioPid = mAudioPid.getText().toString();
+        if (strAudioPid != null && !strAudioPid.equals("")) {
+            apid = Integer.parseInt(strAudioPid);
+        }
         if (mCurrentProgram != null && mCurrentProgram.audioPid != 0) {
             apid= mCurrentProgram.audioPid;
         }

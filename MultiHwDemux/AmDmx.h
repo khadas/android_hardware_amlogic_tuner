@@ -143,10 +143,10 @@ private:
     bool           enable_thread;
     int                 flags;
     pthread_t           thread;
-    pthread_t           dvrthread;
+    //pthread_t           dvrthread;
     //pthread_mutex_t     lock;
     pthread_cond_t      cond;
-    pthread_cond_t      dvr_cond;
+    //pthread_cond_t      dvr_cond;
     //AM_DMX_Source_t     src;
     bool          enable_dvr_thread;
     AM_DVR_Data   *dvrData;

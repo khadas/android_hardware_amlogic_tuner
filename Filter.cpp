@@ -133,9 +133,42 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
                     }
                     memset(&param, 0, sizeof(param));
                     param.pid = mTpid;
-                    param.filter.filter[0] = settings.ts().filterSettings
-                                             .section().condition.tableInfo().tableId;
-                    param.filter.mask[0] = 0xff;
+                    //param.filter.filter[0] = settings.ts().filterSettings
+                     //                        .section().condition.tableInfo().tableId;
+                    //param.filter.mask[0] = 0xff;
+                    bool isRepeat = settings.ts().filterSettings.section().isRepeat;
+                    ALOGD("%s isRepeat:%d", __FUNCTION__, isRepeat);
+                    if (!isRepeat) {
+                        param.flags |= DMX_ONESHOT;
+                    }
+
+                    bool isCheckCrc = settings.ts().filterSettings.section().isCheckCrc;
+                    if (isCheckCrc) {
+                        param.flags |= DMX_CHECK_CRC;
+                    }
+
+                    bool isRaw     = settings.ts().filterSettings.section().isRaw;
+                    if (isRaw) {
+                        param.flags |= DMX_OUTPUT_RAW_MODE;
+                    }
+                    if (settings.ts().filterSettings.section().condition.sectionBits().filter.size() < DMX_FILTER_SIZE) {
+                        memcpy(param.filter.filter, settings.ts().filterSettings
+                                              .section().condition.sectionBits().filter.data(), settings.ts().filterSettings
+                                              .section().condition.sectionBits().filter.size() * sizeof(uint8_t));
+                    }
+
+                    if (settings.ts().filterSettings.section().condition.sectionBits().mask.size() < DMX_FILTER_SIZE) {
+                        memcpy(param.filter.mask, settings.ts().filterSettings
+                          .section().condition.sectionBits().mask.data(), settings.ts().filterSettings
+                          .section().condition.sectionBits().mask.size() * sizeof(uint8_t));
+                    }
+
+                    
+                    if (settings.ts().filterSettings.section().condition.sectionBits().mode.size() < DMX_FILTER_SIZE) {
+                        memcpy(param.filter.mode, settings.ts().filterSettings
+                          .section().condition.sectionBits().mode.data(), settings.ts().filterSettings
+                          .section().condition.sectionBits().mode.size() * sizeof(uint8_t));
+                    }
                     ALOGD("%s tableId:0x%x", __FUNCTION__, param.filter.filter[0]);
                     if (mDemux->getAmDmxDevice()
                         ->AM_DMX_SetSecFilter(mFilterIdx, &param) != 0 ) {
@@ -830,10 +863,9 @@ bool Filter::writeSectionsAndCreateEvent(vector<uint8_t> data) {
     DemuxFilterSectionEvent secEvent;
     secEvent = {
             // temp dump meta data
-            .tableId = mFilterSettings.ts().filterSettings
-                                             .section().condition.tableInfo().tableId,
-            .version = 1,
-            .sectionNum = 1,
+            .tableId = data[0],
+            .version = static_cast<uint16_t>((data[5] >> 1) & 0x1f),
+            .sectionNum = data[6],
             .dataLength = static_cast<uint16_t>(data.size()),
     };
     mFilterEvent.events[size].section(secEvent);

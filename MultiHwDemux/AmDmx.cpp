@@ -66,11 +66,11 @@ AM_ErrorCode_t AM_DMX_Device::AM_dvr_Close(void) {
     AM_ErrorCode_t ret = AM_SUCCESS;
     ALOGD("%s/%d", __FUNCTION__, __LINE__);
 
-    enable_dvr_thread = false;
-    pthread_join(dvrthread, NULL);
+    //enable_dvr_thread = false;
+    //pthread_join(dvrthread, NULL);
     drv->dvr_close();
-    pthread_mutex_destroy(&dvr_lock);
-    pthread_cond_destroy(&dvr_cond);
+    //pthread_mutex_destroy(&dvr_lock);
+    //pthread_cond_destroy(&dvr_cond);
 
     return ret;
 }
