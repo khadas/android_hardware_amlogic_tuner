@@ -30,7 +30,7 @@ namespace tuner {
 namespace V1_0 {
 namespace implementation {
 
-FrontendDvbtDevice::FrontendDvbtDevice(uint32_t hwId, FrontendType type, Frontend* context)
+FrontendDvbtDevice::FrontendDvbtDevice(uint32_t hwId, FrontendType type, const sp<Frontend>& context)
     : FrontendDevice(hwId, type, context) {
 }
 

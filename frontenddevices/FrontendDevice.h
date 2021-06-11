@@ -22,6 +22,7 @@
 #define CONFIG_AMLOGIC_DVB_COMPAT
 #include "linux/dvb/frontend.h"
 #include <semaphore.h>
+#include <utils/Thread.h>
 
 using namespace std;
 
@@ -33,14 +34,16 @@ namespace V1_0 {
 namespace implementation {
 
 class Frontend;
+class HwFeState;
 
 class FrontendDevice : public Thread {
 public:
-    FrontendDevice(uint32_t hwId, FrontendType type, Frontend* context);
+    FrontendDevice(uint32_t thId, FrontendType type, const sp<Frontend>& context);
     virtual ~FrontendDevice();
     virtual void release();
     bool checkOpen(bool autoOpen);
     virtual void stop();
+    virtual void stopByHw();
     virtual void clearTuner();
     virtual int  tune(const FrontendSettings& settings);
     virtual int  scan(const FrontendSettings& settings, FrontendScanType type);
@@ -53,9 +56,11 @@ public:
 
     virtual int getFrontendSettings(FrontendSettings *settings, void* fe_params) {return -1;};
     virtual int getFeDeliverySystem(FrontendType type) {return SYS_UNDEFINED;};
+    void setHwFe(const sp<HwFeState>& hwFe);
 
     typedef struct {
         uint32_t          id;
+        sp<HwFeState>     mHw;
         int               devFd;
         int               deliverySys;
         FrontendType      type;
@@ -87,9 +92,10 @@ public:
     fe_dev_t* getFeDevice();
 
 private:
-    Frontend*        mContext;
+    sp<Frontend>     mContext;
     sem_t            threadSemaphore;
     std::mutex       mThreadStatLock;
+    std::mutex       mHwDevLock;
     e_event_stat_t   mThreadState;
     fe_dev_t         mDev;
     bool             unsupportSystem;
@@ -106,6 +112,7 @@ private:
     int internalTune(const FrontendSettings & settings);
     int blindTune(const FrontendSettings& settings);
 };
+
 
 }  // namespace implementation
 }  // namespace V1_0

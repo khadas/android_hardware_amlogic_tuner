@@ -26,6 +26,7 @@
 #include "Descrambler.h"
 #include "Frontend.h"
 #include "Lnb.h"
+#include "HwFeState.h"
 
 namespace android {
 namespace hardware {
@@ -34,9 +35,10 @@ namespace tuner {
 namespace V1_0 {
 namespace implementation {
 
-FrontendDevice::FrontendDevice(uint32_t hwId, FrontendType type, Frontend* context) {
+FrontendDevice::FrontendDevice(uint32_t thId, FrontendType type, const sp<Frontend>& context) {
     mContext = context;
-    mDev.id  = hwId;
+    mDev.id  = thId;
+    mDev.mHw = nullptr;
     mDev.type = type;
     mDev.devFd = -1;
     mDev.feSettings = NULL;
@@ -69,40 +71,76 @@ FrontendDevice::fe_dev_t* FrontendDevice::getFeDevice() {
     return &mDev;
 }
 
+void FrontendDevice::setHwFe(const sp<HwFeState>& hwFe) {
+    mDev.mHw = hwFe;
+}
+
 void FrontendDevice::release() {
     updateThreadState(FrontendDevice::STATE_FINISH);
     sem_post(&threadSemaphore);
     clearTuner();
-    if (mDev.devFd != -1)
-        ::close(mDev.devFd);
+    if (mDev.mHw != nullptr)
+    {
+        std::lock_guard<std::mutex> lock(mThreadStatLock);
+        mDev.mHw->release(mDev.devFd, this);
+        mDev.devFd = -1;
+    }
 
     requestExitAndWait();
 }
 
 void FrontendDevice::stop() {
     updateThreadState(FrontendDevice::STATE_STOP);
-    clearTuner();
     mDev.tuneFreq = 0;
-    if (mDev.devFd != -1) {
-        ::close(mDev.devFd);
+    clearTuner();
+    if (mDev.mHw != nullptr)
+    {
+        std::lock_guard<std::mutex> lock(mThreadStatLock);
+        clearTuner();
+        mDev.mHw->release(mDev.devFd, this);
         mDev.devFd = -1;
     }
-    ALOGE("%s finish.", __FUNCTION__);
+
+    ALOGE("%s finish (id:%d).", __FUNCTION__, mDev.id);
+}
+
+void FrontendDevice::stopByHw() {
+    ALOGE("[id:%d] stop for hw reclaimed.", mDev.id);
+    int state = getThreadState();
+    switch (state)
+    {
+        case FrontendDevice::STATE_TUNE_START:
+            mContext->sendEventCallBack(FrontendEventType::NO_SIGNAL);
+            updateThreadState(FrontendDevice::STATE_STOP);
+            break;
+        case FrontendDevice::STATE_SCAN_START:
+            mContext->sendScanCallBack(mDev.tuneFreq, false, true);
+            updateThreadState(FrontendDevice::STATE_STOP);
+            break;
+        case FrontendDevice::STATE_TUNE_IDLE:
+            mContext->sendEventCallBack(FrontendEventType::LOST_LOCK);
+            updateThreadState(FrontendDevice::STATE_STOP);
+            break;
+        default:
+            break;
+    }
+    {
+        std::lock_guard<std::mutex> lock(mHwDevLock);
+        mDev.devFd = -1;
+    }
 }
 
 bool FrontendDevice::checkOpen(bool autoOpen) {
     ALOGE("%s", __FUNCTION__);
     bool ret=  true;
-    char fe_name[32];
 
     if (unsupportSystem) return false;
 
-    if (mDev.devFd == -1) {
+    std::lock_guard<std::mutex> lock(mHwDevLock);
+    if (mDev.devFd == -1 && mDev.mHw != nullptr) {
         if (autoOpen) {
-            snprintf(fe_name, sizeof(fe_name),
-                 "/dev/dvb0.frontend%d", mDev.id);
-            if ((mDev.devFd = open(fe_name, O_RDWR | O_NONBLOCK)) <0) {
-                ALOGE("Open %s failed.error: %s", fe_name, strerror(errno));
+            if ((mDev.devFd = mDev.mHw->acquire(this)) <0) {
+                ALOGE("Cannot acquire tuner for %p", this);
                 ret = false;
             }
         } else {
@@ -118,13 +156,13 @@ int FrontendDevice::tune(const FrontendSettings & settings) {
 }
 
 int FrontendDevice::internalTune(const FrontendSettings & settings) {
-    ALOGE("%s", __FUNCTION__);
+    ALOGE("%s, id(%d)", __FUNCTION__, mDev.id);
     dvb_frontend_parameters fe_params;
 
     FrontendSettings tuneSettings = settings;
     mDev.feSettings = &tuneSettings;
     if (getFrontendSettings(&tuneSettings, &fe_params) <0) {
-        ALOGE("Wrong delivery system in FrontendSetgings, or not support it.");
+        ALOGE("[id:%d] Wrong delivery system in FrontendSetgings, or not support it.", mDev.id);
         return INVALID_ARGUMENT;
     }
     getFeDevice()->blindFreq = fe_params.frequency =
@@ -194,7 +232,7 @@ uint16_t FrontendDevice::getSingnalStrenth() {
 }
 
 int FrontendDevice::setFeSystem() {
-    ALOGE("%s", __FUNCTION__);
+    ALOGE("%s, id(%d)", __FUNCTION__, mDev.id);
     if (mDev.devFd != -1) {
         int sys = getFeDeliverySystem(mDev.type);
         struct dtv_property p =
@@ -202,7 +240,7 @@ int FrontendDevice::setFeSystem() {
              .u.data = (enum fe_delivery_system)sys};
         struct dtv_properties props = {.num = 1, .props = &p};
         if (ioctl(mDev.devFd, FE_SET_PROPERTY, &props) == -1) {
-            ALOGE("Set fe system failed: %s", strerror(errno));
+            ALOGE("Set fe system failed with id(%d): %s", mDev.id, strerror(errno));
             return -1;
         }
         mDev.deliverySys = sys;
@@ -244,6 +282,7 @@ int FrontendDevice::scan(const FrontendSettings & settings, FrontendScanType typ
 }
 
 void FrontendDevice::clearTuner() {
+#if 0
     if (!checkOpen(true)) return;
 
     struct dtv_property p =
@@ -252,6 +291,7 @@ void FrontendDevice::clearTuner() {
     struct dtv_properties props = {.num = 1, .props = &p};
 
     ioctl(mDev.devFd, FE_SET_PROPERTY, &props);
+#endif
 }
 
 int FrontendDevice::stopTune() {
@@ -266,13 +306,12 @@ int FrontendDevice::stopScan() {
 }
 
 status_t FrontendDevice::readyToRun() {
-    ALOGE("%s", __FUNCTION__);
+    ALOGE("%s with frontendType(%d), id(%d)", __FUNCTION__, mDev.type, mDev.id);
     mThreadState = STATE_INITIAL_IDLE;
     return NO_ERROR;
 }
 
 void FrontendDevice::onFirstRef(void) {
-    ALOGE("%s", __FUNCTION__);
     run("DroidFeTask");
 }
 
@@ -295,21 +334,25 @@ bool FrontendDevice::threadLoop() {
             || state == FrontendDevice::STATE_SCAN_START) {
             mDev.islocked = false;
         }
-        pfd.fd = mDev.devFd;
-        pfd.events = POLLIN;
-        pfd.revents = 0;
-        for (start_time = getClockMilliSeconds();
-             !stop && ((getClockMilliSeconds() - start_time) < 3000);) {
-            if (poll(&pfd, 1, 50) == 1) {
-                if (ioctl(mDev.devFd, FE_GET_EVENT, &fe_event) >= 0) {
-                    if ((fe_event.status & FE_HAS_LOCK) !=0) {
-                        break;
+        {
+            std::lock_guard<std::mutex> lock(mHwDevLock);
+            pfd.fd = mDev.devFd;
+            pfd.events = POLLIN;
+            pfd.revents = 0;
+            for (start_time = getClockMilliSeconds();
+                 !stop && ((getClockMilliSeconds() - start_time) < 3000);) {
+                if (poll(&pfd, 1, 50) == 1) {
+                    if (ioctl(mDev.devFd, FE_GET_EVENT, &fe_event) >= 0) {
+                        if ((fe_event.status & FE_HAS_LOCK) !=0
+                            || (fe_event.status & FE_TIMEDOUT) != 0) {
+                            break;
+                        }
                     }
                 }
-            }
-            state = getThreadState();
-            if (state == FrontendDevice::STATE_STOP) {
-                stop = true;
+                state = getThreadState();
+                if (state == FrontendDevice::STATE_STOP) {
+                    stop = true;
+                }
             }
         }
         if (fe_event.status != 0) {
@@ -367,6 +410,7 @@ void FrontendDevice::updateThreadState(int state) {
     std::lock_guard<std::mutex> lock(mThreadStatLock);
     mThreadState = (e_event_stat_t)state;
 }
+
 
 }  // namespace implementation
 }  // namespace V1_0

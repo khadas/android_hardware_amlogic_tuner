@@ -31,7 +31,7 @@ namespace tuner {
 namespace V1_0 {
 namespace implementation {
 
-FrontendAnalogDevice::FrontendAnalogDevice(uint32_t hwId, FrontendType type, Frontend* context)
+FrontendAnalogDevice::FrontendAnalogDevice(uint32_t hwId, FrontendType type, const sp<Frontend>& context)
     : FrontendDevice(hwId, type, context) {
 }
 

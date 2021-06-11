@@ -22,6 +22,7 @@
 #include "Demux.h"
 #include "Frontend.h"
 #include "Lnb.h"
+#include "HwFeState.h"
 
 using namespace std;
 
@@ -35,6 +36,7 @@ namespace implementation {
 class Frontend;
 class Demux;
 class Descrambler;
+class HwFeState;
 
 class Tuner : public ITuner {
   public:
@@ -69,11 +71,27 @@ class Tuner : public ITuner {
 
     void attachDescramblerToDemux(uint32_t descramblerId, uint32_t demuxId) const;
     void detachDescramblerFromDemux(uint32_t descramblerId, uint32_t demuxId) const;
+
+    typedef struct {
+        int id;
+        uint32_t minFreq;
+        uint32_t maxFreq;
+        uint32_t minSymbol;
+        uint32_t maxSymbol;
+        uint32_t acquireRange;
+        uint32_t statusCap;
+    } HwFeCaps_t;
+
+    typedef struct {
+        int id;
+        int hwId;
+        sp<Frontend> mFrontend;
+        FrontendInfo mInfo;
+    } FrontendInfos_t;
   private:
     virtual ~Tuner();
     // Static mFrontends array to maintain local frontends information
-    vector<sp<Frontend>> mFrontends;
-    vector<FrontendInfo::FrontendCapabilities> mFrontendCaps;
+    vector<FrontendInfos_t> mFrontendInfos;
     std::map<uint32_t, uint32_t> mFrontendToDemux;
     std::map<uint32_t, sp<Demux>> mDemuxes;
     std::map<uint32_t, sp<Descrambler>> mDescramblers;
@@ -84,6 +102,7 @@ class Tuner : public ITuner {
     uint32_t mLastUsedId = -1;
     int mLastUsedDescramblerId = -1;
     vector<sp<Lnb>> mLnbs;
+    vector<sp<HwFeState>> mHwFes;
 };
 
 }  // namespace implementation

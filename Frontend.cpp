@@ -33,7 +33,7 @@ namespace tuner {
 namespace V1_0 {
 namespace implementation {
 
-Frontend::Frontend(FrontendType type, FrontendId id, sp<Tuner> tuner) {
+Frontend::Frontend(FrontendType type, FrontendId id, const sp<Tuner>& tuner, const sp<HwFeState>& hwFe) {
     mType = type;
     mId = id;
     mTunerService = tuner;
@@ -55,6 +55,7 @@ Frontend::Frontend(FrontendType type, FrontendId id, sp<Tuner> tuner) {
     } else {
         mFeDev = new FrontendDevice(id, type, this);
     }
+    mFeDev->setHwFe(hwFe);
 }
 
 Frontend::~Frontend() {

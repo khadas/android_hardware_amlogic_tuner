@@ -32,7 +32,7 @@ class Frontend;
 
 class FrontendDvbsDevice : public FrontendDevice {
 public:
-    FrontendDvbsDevice(uint32_t hwId, FrontendType type, Frontend* context);
+    FrontendDvbsDevice(uint32_t hwId, FrontendType type, const sp<Frontend>& context);
     virtual int getFrontendSettings(FrontendSettings *settings, void* fe_params);
     virtual int getFeDeliverySystem(FrontendType type);
     virtual FrontendModulationStatus getFeModulationStatus();

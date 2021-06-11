@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-#ifndef ANDROID_HARDWARE_TV_TUNER_V1_0_FRONTEND_ISDBT_DEVICE_H_
-#define ANDROID_HARDWARE_TV_TUNER_V1_0_FRONTEND_ISDBT_DEVICE_H_
+#ifndef ANDROID_HARDWARE_TV_TUNER_V1_0_HWFESATE_H_
+#define ANDROID_HARDWARE_TV_TUNER_V1_0_HWFESATE_H_
 
-#include "FrontendDevice.h"
+#include <utils/RefBase.h>
 
 using namespace std;
 
@@ -28,21 +28,19 @@ namespace tuner {
 namespace V1_0 {
 namespace implementation {
 
-class Frontend;
+class FrontendDevice;
 
-class FrontendIsdbtDevice : public FrontendDevice {
-public:
-    FrontendIsdbtDevice(uint32_t hwId, FrontendType type, const sp<Frontend>& context);
-    virtual int getFrontendSettings(FrontendSettings *settings, void* fe_params);
-    virtual int getFeDeliverySystem(FrontendType type);
-    virtual FrontendModulationStatus getFeModulationStatus();
+class HwFeState : public RefBase {
+  public:
+   HwFeState(int hwId);
+   int acquire(sp<FrontendDevice> device);
+   void release(int fd, sp<FrontendDevice> device);
 
-private:
-    ~FrontendIsdbtDevice();
-    int getFeModulationType(const FrontendIsdbtModulation& type);
-    int getFeInnerFecTypeFromCodeRate(const FrontendDvbtCoderate& rate);
-    int getFeBandwithType(const FrontendIsdbtBandwidth& bandWidth);
-    int getFeDvbGuardIntervalType(const FrontendDvbtGuardInterval& type);
+  private:
+   virtual ~HwFeState();
+   int hwId;
+   int fd;
+   sp<FrontendDevice> owner;
 };
 
 }  // namespace implementation
@@ -52,4 +50,4 @@ private:
 }  // namespace hardware
 }  // namespace android
 
-#endif  // ANDROID_HARDWARE_TV_TUNER_V1_0_FRONTEND_ISDBT_DEVICE_H_
+#endif  // ANDROID_HARDWARE_TV_TUNER_V1_0_HWFESATE_H_

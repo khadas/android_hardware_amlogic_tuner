@@ -41,10 +41,11 @@ using ::android::hardware::tv::tuner::V1_0::Result;
 
 class Tuner;
 class FrontendDevice;
+class HwFeState;
 
 class Frontend : public IFrontend {
   public:
-    Frontend(FrontendType type, FrontendId id, sp<Tuner> tuner);
+    Frontend(FrontendType type, FrontendId id, const sp<Tuner>& tuner, const sp<HwFeState>& hwFe);
 
     virtual Return<Result> close() override;
 

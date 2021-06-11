@@ -11,6 +11,7 @@ cc_defaults {
         "frontenddevices/FrontendDvbcDevice.cpp",
         "frontenddevices/FrontendDvbsDevice.cpp",
         "frontenddevices/FrontendIsdbtDevice.cpp",
+        "frontenddevices/HwFeState.cpp",
         "utils/TSPMessage.cpp",
         "utils/TSPLooper.cpp",
         "utils/TSPLooperRoster.cpp",
@@ -53,6 +54,7 @@ cc_defaults {
         "vendor.amlogic.hardware.systemcontrol@1.0",
         "vendor.amlogic.hardware.systemcontrol@1.1",
         "libsecmem",
+        "libjsoncpp",
    ],
     header_libs: [
         "media_plugin_headers",
