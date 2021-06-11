@@ -155,6 +155,34 @@ int FrontendDevice::tune(const FrontendSettings & settings) {
     return internalTune(settings);
 }
 
+static int bandwidth_hz (enum fe_bandwidth bw) {
+    int hz;
+
+    switch (bw) {
+    case BANDWIDTH_8_MHZ:
+    default:
+        hz = 8000000;
+        break;
+    case BANDWIDTH_7_MHZ:
+        hz = 7000000;
+        break;
+    case BANDWIDTH_6_MHZ:
+        hz = 6000000;
+        break;
+    case BANDWIDTH_5_MHZ:
+        hz = 5000000;
+        break;
+    case BANDWIDTH_10_MHZ:
+        hz = 10000000;
+        break;
+    case BANDWIDTH_1_712_MHZ:
+        hz = 1712000;
+        break;
+    }
+
+    return hz;
+}
+
 int FrontendDevice::internalTune(const FrontendSettings & settings) {
     ALOGE("%s, id(%d)", __FUNCTION__, mDev.id);
     dvb_frontend_parameters fe_params;
@@ -170,19 +198,110 @@ int FrontendDevice::internalTune(const FrontendSettings & settings) {
         ? getFeDevice()->blindFreq : fe_params.frequency;
 
     mDev.tuneFreq = fe_params.frequency;
-    if (checkOpen(true)) {
-        if (setFeSystem() != 0) {
-            ALOGE("Set fe failed.");
-            return INVALID_ARGUMENT;
-        }
-    } else {
+    if (!checkOpen(true)) {
         ALOGE("Open fe failed.");
         return UNAVAILABLE;
     }
 
+    /*
     if (ioctl(mDev.devFd, FE_SET_FRONTEND, &fe_params) < 0) {
         ALOGE("%s error(%d):%s", __FUNCTION__, errno, strerror(errno));
         return UNAVAILABLE;
+    }*/
+
+    struct dtv_properties props;
+    struct dtv_property cmds[16];
+    struct dtv_property *cmd = cmds;
+    int ncmd = 0;
+
+    cmd->cmd = DTV_DELIVERY_SYSTEM;
+    cmd->u.data = getFeDeliverySystem(mDev.type);
+    cmd ++;
+    ncmd ++;
+
+    cmd->cmd = DTV_FREQUENCY;
+    cmd->u.data = fe_params.frequency;
+    cmd ++;
+    ncmd ++;
+
+    switch (mDev.type) {
+    case FrontendType::ATSC:
+        cmd->cmd = DTV_MODULATION;
+        cmd->u.data = fe_params.u.vsb.modulation;
+        cmd ++;
+        ncmd ++;
+        break;
+    case FrontendType::DVBC:
+        cmd->cmd = DTV_MODULATION;
+        cmd->u.data = fe_params.u.qam.modulation;
+        cmd ++;
+        ncmd ++;
+
+        cmd->cmd = DTV_SYMBOL_RATE;
+        cmd->u.data = fe_params.u.qam.symbol_rate;
+        cmd ++;
+        ncmd ++;
+        break;
+    case FrontendType::DVBS:
+        cmd->cmd = DTV_SYMBOL_RATE;
+        cmd->u.data = fe_params.u.qpsk.symbol_rate;
+        cmd ++;
+        ncmd ++;
+
+        cmd->cmd = DTV_INNER_FEC;
+        cmd->u.data = fe_params.u.qpsk.fec_inner;
+        cmd ++;
+        ncmd ++;
+        break;
+    case FrontendType::DVBT:
+        if (fe_params.u.ofdm.bandwidth != BANDWIDTH_AUTO) {
+            cmd->cmd = DTV_BANDWIDTH_HZ;
+            cmd->u.data = bandwidth_hz(fe_params.u.ofdm.bandwidth);
+            cmd ++;
+            ncmd ++;
+        }
+
+        cmd->cmd = DTV_TRANSMISSION_MODE;
+        cmd->u.data = fe_params.u.ofdm.transmission_mode;
+        cmd ++;
+        ncmd ++;
+
+        cmd->cmd = DTV_GUARD_INTERVAL;
+        cmd->u.data = fe_params.u.ofdm.guard_interval;
+        cmd ++;
+        ncmd ++;
+
+        if ((settings.dvbt().standard == FrontendDvbtStandard::T2)
+                && (settings.dvbt().plpMode == FrontendDvbtPlpMode::MANUAL)) {
+            cmd->cmd = DTV_DVBT2_PLP_ID_LEGACY;
+            cmd->u.data = settings.dvbt().plpId;
+
+            cmd ++;
+            ncmd ++;
+        }
+        break;
+    case FrontendType::ISDBT:
+        if (fe_params.u.ofdm.bandwidth != BANDWIDTH_AUTO) {
+            cmd->cmd = DTV_BANDWIDTH_HZ;
+            cmd->u.data = bandwidth_hz(fe_params.u.ofdm.bandwidth);
+            cmd ++;
+            ncmd ++;
+        }
+        break;
+    default:
+        break;
+    }
+
+    cmd->cmd = DTV_TUNE;
+    cmd ++;
+    ncmd ++;
+
+    props.num = ncmd;
+    props.props = cmds;
+
+    if (ioctl(mDev.devFd, FE_SET_PROPERTY, &props) == -1) {
+         ALOGE("tune failed, (%s)", strerror(errno));
+         return UNAVAILABLE;
     }
 
     sem_post(&threadSemaphore);

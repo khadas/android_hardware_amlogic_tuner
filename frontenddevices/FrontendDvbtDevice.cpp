@@ -97,7 +97,10 @@ int FrontendDvbtDevice::getFeDeliverySystem(FrontendType type) {
     if (type != FrontendType::DVBT) {
         fe_system = SYS_UNDEFINED;
     } else {
-        fe_system = SYS_DVBT;
+       if (getFeDevice()->feSettings->dvbt().standard == FrontendDvbtStandard::T2)
+            fe_system = SYS_DVBT2;
+       else
+            fe_system = SYS_DVBT;
     }
 
     return (int)(fe_system);

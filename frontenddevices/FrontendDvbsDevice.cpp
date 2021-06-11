@@ -50,7 +50,7 @@ int FrontendDvbsDevice::getFrontendSettings(FrontendSettings *settings, void * f
         return -1;
     }
 
-    p_fe_params->frequency = settings->dvbs().frequency;
+    p_fe_params->frequency = settings->dvbs().frequency / 1000;
     p_fe_params->u.qpsk.symbol_rate = settings->dvbs().symbolRate;
     if (settings->dvbs().modulation == FrontendDvbsModulation::UNDEFINED) {
         settings->dvbs().modulation = FrontendDvbsModulation::MOD_QPSK;
