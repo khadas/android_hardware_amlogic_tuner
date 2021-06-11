@@ -200,6 +200,8 @@ class Demux : public IDemux {
      */
     std::mutex mFrontendInputThreadLock;
 
+    std::mutex mFilterLock;
+
     // temp handle single PES filter
     // TODO handle mulptiple Pes filters
     int mPesSizeLeft = 0;
@@ -207,7 +209,6 @@ class Demux : public IDemux {
     sp<AM_DMX_Device> AmDmxDevice;
     const bool DEBUG_DEMUX = false;
     bool mDvrOpened;
-    int mEnablePassthrough = 0;
     sp<MediaSyncWrap> mMediaSyncWrap;
 };
 

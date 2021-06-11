@@ -34,7 +34,6 @@ AM_DMX_Device::AM_DMX_Device() {
 
 AM_DMX_Device::~AM_DMX_Device() {
     if (drv) {
-        drv->dvr_close();
         drv = NULL;
     }
     if (dvrData != NULL) {

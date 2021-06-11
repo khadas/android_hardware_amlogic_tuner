@@ -43,7 +43,6 @@ Filter::Filter(DemuxFilterType type, uint32_t filterId, uint32_t bufferSize,
     mBufferSize = bufferSize;
     mCallback = cb;
     mDemux = demux;
-    mFilterIdx = -1;
 #ifdef TUNERHAL_DBG
     mFilterEventSize = property_get_int32(TF_FILTER_PROP_EVENTSIZE, 10);
     mFilterEventSize *= 1024 * 1024;
@@ -121,13 +120,13 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
     switch (mType.mainType) {
         case DemuxFilterMainType::TS:
             mTpid = settings.ts().tpid;
-            ALOGD("%s DemuxFilterMainType::TS mTpid:0x%x", __FUNCTION__, mTpid);
+            ALOGD("%s mainType:TS mTpid:0x%x", __FUNCTION__, mTpid);
             switch (mType.subType.tsFilterType()) {
                 case DemuxTsFilterType::SECTION: {
-                    ALOGD("%s DemuxTsFilterType::SECTION", __FUNCTION__);
+                    ALOGD("%s subType:SECTION", __FUNCTION__);
                     struct dmx_sct_filter_params param;
                     if (mDemux->getAmDmxDevice()
-                        ->AM_DMX_SetBufferSize(mFilterIdx, mBufferSize) != 0 ) {
+                        ->AM_DMX_SetBufferSize(mFilterId, mBufferSize) != 0 ) {
                         return Result::UNAVAILABLE;
                     }
                     memset(&param, 0, sizeof(param));
@@ -169,13 +168,13 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
                     }
                     ALOGD("%s tableId:0x%x", __FUNCTION__, param.filter.filter[0]);
                     if (mDemux->getAmDmxDevice()
-                        ->AM_DMX_SetSecFilter(mFilterIdx, &param) != 0 ) {
+                        ->AM_DMX_SetSecFilter(mFilterId, &param) != 0 ) {
                         return Result::UNAVAILABLE;
                     }
                     break;
                 }
                 case DemuxTsFilterType::AUDIO: {
-                    ALOGD("%s DemuxTsFilterType::AUDIO", __FUNCTION__);
+                    ALOGD("%s subType:AUDIO", __FUNCTION__);
                     if (settings.ts().filterSettings.av().isPassthrough) {
                         //aparam.flags |= DMX_OUTPUT_RAW_MODE;
                         // for passthrough mode, will set pes filter in media hal
@@ -192,18 +191,18 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
                         aparam.flags = 0;
                         aparam.flags |= DMX_ES_OUTPUT;
                         if (mDemux->getAmDmxDevice()
-                            ->AM_DMX_SetBufferSize(mFilterIdx, mBufferSize) != 0 ) {
+                            ->AM_DMX_SetBufferSize(mFilterId, mBufferSize) != 0 ) {
                             return Result::UNAVAILABLE;
                         }
                         if (mDemux->getAmDmxDevice()
-                            ->AM_DMX_SetPesFilter(mFilterIdx, &aparam) != 0 ) {
+                            ->AM_DMX_SetPesFilter(mFilterId, &aparam) != 0 ) {
                             return Result::UNAVAILABLE;
                         }
                     }
                     break;
                 }
                 case DemuxTsFilterType::VIDEO: {
-                    ALOGD("%s DemuxTsFilterType::VIDEO mTpid:0x%x", __FUNCTION__, mTpid);
+                    ALOGD("%s subType:VIDEO", __FUNCTION__);
                     if (settings.ts().filterSettings.av().isPassthrough) {
                         //vparam.flags |= DMX_OUTPUT_RAW_MODE;
                         // for passthrough mode, will set pes filter in media hal
@@ -213,6 +212,7 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
                     } else {
                         int buffSize = 0;
                         struct dmx_pes_filter_params vparam;
+                        memset(&vparam, 0, sizeof(vparam));
                         vparam.pid = mTpid;
                         vparam.pes_type = DMX_PES_VIDEO0;
                         vparam.input = DMX_IN_FRONTEND;
@@ -224,19 +224,20 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
 #else
                         buffSize = mBufferSize;
 #endif
-                        ALOGD("%s DemuxTsFilterType::VIDEO AM_DMX_SetBufferSize:%d MB", __FUNCTION__, buffSize/1024/1024);
+                        ALOGD("%s AM_DMX_SetBufferSize:%d MB", __FUNCTION__, buffSize/1024/1024);
                         if (mDemux->getAmDmxDevice()
-                            ->AM_DMX_SetBufferSize(mFilterIdx, buffSize) != 0 ) {
+                            ->AM_DMX_SetBufferSize(mFilterId, buffSize) != 0 ) {
                             return Result::UNAVAILABLE;
                         }
                         if (mDemux->getAmDmxDevice()
-                            ->AM_DMX_SetPesFilter(mFilterIdx, &vparam) != 0 ) {
+                            ->AM_DMX_SetPesFilter(mFilterId, &vparam) != 0 ) {
                             return Result::UNAVAILABLE;
                         }
                     }
                     break;
                 }
                 case DemuxTsFilterType::RECORD: {
+                    ALOGD("%s subType:RECORD", __FUNCTION__);
                     struct dmx_pes_filter_params pparam;
                     memset(&pparam, 0, sizeof(pparam));
                     pparam.pid = mTpid;
@@ -244,7 +245,7 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
                     pparam.output = DMX_OUT_TS_TAP;
                     pparam.pes_type = DMX_PES_OTHER;
                     if (mDemux->getAmDmxDevice()
-                        ->AM_DMX_SetPesFilter(mFilterIdx, &pparam) != 0 ) {
+                        ->AM_DMX_SetPesFilter(mFilterId, &pparam) != 0 ) {
                         ALOGE("record AM_DMX_SetPesFilter");
                         return Result::UNAVAILABLE;
                     }
@@ -252,6 +253,7 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
                     break;
                 }
                 case DemuxTsFilterType::PCR: {
+                    ALOGD("%s subType:PCR", __FUNCTION__);
                     break;
                 }
                 default:
@@ -274,10 +276,10 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
 }
 
 Return<Result> Filter::start() {
-    ALOGD("%s/%d mFilterId = %d mFilterIdx:%d", __FUNCTION__, __LINE__, mFilterId, mFilterIdx);
+    ALOGD("%s/%d mFilterId:%d", __FUNCTION__, __LINE__, mFilterId);
     if (mDemux->getAmDmxDevice()
-        ->AM_DMX_StartFilter(mFilterIdx) != 0) {
-        ALOGE("demux start filter failed!");
+        ->AM_DMX_StartFilter(mFilterId) != 0) {
+        ALOGE("Start filter %d failed!", mFilterId);
     }
 
     //return startFilterLoop();
@@ -285,9 +287,9 @@ Return<Result> Filter::start() {
 }
 
 Return<Result> Filter::stop() {
-    ALOGD("%s/%d", __FUNCTION__, __LINE__);
-    mDemux->getAmDmxDevice()->AM_DMX_SetCallback(mFilterIdx, NULL, NULL);
-    mDemux->getAmDmxDevice()->AM_DMX_StopFilter(mFilterIdx);
+    ALOGD("%s/%d mFilterId:%d", __FUNCTION__, __LINE__, mFilterId);
+    mDemux->getAmDmxDevice()->AM_DMX_SetCallback(mFilterId, NULL, NULL);
+    mDemux->getAmDmxDevice()->AM_DMX_StopFilter(mFilterId);
     mFilterThreadRunning = false;
 
     std::lock_guard<std::mutex> lock(mFilterThreadLock);
@@ -319,12 +321,12 @@ Return<Result> Filter::releaseAvHandle(const hidl_handle& /*avMemory*/, uint64_t
 Return<Result> Filter::close() {
     ALOGD("%s/%d", __FUNCTION__, __LINE__);
 
-    mDemux->getAmDmxDevice()->AM_DMX_SetCallback(mFilterIdx, NULL, NULL);
-    mDemux->getAmDmxDevice()->AM_DMX_StopFilter(mFilterIdx);
-    mDemux->getAmDmxDevice()->AM_DMX_FreeFilter(mFilterIdx);
+    mDemux->getAmDmxDevice()->AM_DMX_SetCallback(mFilterId, NULL, NULL);
+    mDemux->getAmDmxDevice()->AM_DMX_StopFilter(mFilterId);
+    mDemux->getAmDmxDevice()->AM_DMX_FreeFilter(mFilterId);
     if (mFilterMQ.get() != NULL)
         mFilterMQ.reset();
-    return mDemux->removeFilter(mFilterIdx);
+    return mDemux->removeFilter(mFilterId);
 }
 
 bool Filter::createFilterMQ() {
@@ -334,7 +336,7 @@ bool Filter::createFilterMQ() {
     std::unique_ptr<FilterMQ> tmpFilterMQ =
             std::unique_ptr<FilterMQ>(new (std::nothrow) FilterMQ(mBufferSize, true));
     if (!tmpFilterMQ->isValid()) {
-        ALOGW("[Filter] Failed to create FMQ of filter with idx: %d", mFilterIdx);
+        ALOGW("[Filter] Failed to create FMQ for filter %d", mFilterId);
         return false;
     }
 
@@ -365,7 +367,7 @@ void* Filter::__threadLoopFilter(void* user) {
 void Filter::filterThreadLoop() {
     std::lock_guard<std::mutex> lock(mFilterThreadLock);
     mFilterThreadRunning = true;
-    ALOGD("[Filter] filter %d threadLoop start.", mFilterIdx);
+    ALOGD("[Filter] Filter %d threadLoop start.", mFilterId);
 
     // For the first time of filter output, implementation needs to send the filter
     // Event Callback without waiting for the DATA_CONSUMED to init the process.
@@ -378,10 +380,10 @@ void Filter::filterThreadLoop() {
             continue;
         }
         if (mCallback == nullptr) {
-            ALOGW("[Filter] filter %d does not hava callback. Ending thread", mFilterIdx);
+            ALOGW("[Filter] Filter %d does not hava callback. Ending thread", mFilterId);
             break;
         }
-        ALOGD("onFilterEvent mFilterId:%d", mFilterIdx);
+        ALOGD("onFilterEvent mFilterId:%d", mFilterId);
         // After successfully write, send a callback and wait for the read to be done
         mCallback->onFilterEvent(mFilterEvent);
         freeAvHandle();
@@ -423,18 +425,18 @@ void Filter::filterThreadLoop() {
             // We do not wait for the last read to be done
             // VTS can verify the read result itself.
             if (i == SECTION_WRITE_COUNT - 1) {
-                ALOGD("[Filter] filter %d writing done. Ending thread", mFilterIdx);
+                ALOGD("[Filter] Filter %d writing done. Ending thread", mFilterId);
                 //break;
             }
         }
         mFilterThreadRunning = false;
     }
 
-    ALOGD("[Filter] filter %d thread ended.", mFilterIdx);
+    ALOGD("[Filter] Filter %d thread ended.", mFilterId);
 }
 
 void Filter::fillDataToDecoder() {
-    ALOGV("fillDataToDecoder ->filter idx %d", mFilterIdx);
+    ALOGV("%s/%d mFilterId:%d", __FUNCTION__, __LINE__, mFilterId);
 
     // For the first time of filter output, implementation needs to send the filter
     // Event Callback without waiting for the DATA_CONSUMED to init the process.
@@ -443,7 +445,7 @@ void Filter::fillDataToDecoder() {
             return;
         }
         if (mCallback == nullptr) {
-            ALOGW("[Filter] filter %d does not hava callback. Ending thread", mFilterId);
+            ALOGW("[Filter] mFilterId:%d does not hava callback. Ending thread", mFilterId);
             return;
         }
         // After successfully write, send a callback and wait for the read to be done
@@ -455,7 +457,7 @@ void Filter::fillDataToDecoder() {
 }
 
 void Filter::freeAvHandle() {
-    ALOGV("%s/%d filter idx:%d", __FUNCTION__, __LINE__, mFilterIdx);
+    ALOGV("%s/%d mFilterId:%d", __FUNCTION__, __LINE__, mFilterId);
     if (!mIsMediaFilter) {
         return;
     }
@@ -477,8 +479,8 @@ void Filter::maySendFilterStatusCallback() {
     DemuxFilterStatus newStatus = checkFilterStatusChange(
             availableToWrite, availableToRead, ceil(fmqSize * 0.75), ceil(fmqSize * 0.25));
     if (mFilterStatus != newStatus) {
-        ALOGD("%s/%d filter idx:%d aw:%d ar:%d fmqSize:%d",
-            __FUNCTION__, __LINE__, mFilterIdx, availableToWrite, availableToRead, fmqSize);
+        ALOGD("%s/%d mFilterId:%d aw:%d ar:%d fmqSize:%d", __FUNCTION__, __LINE__,
+        mFilterId, availableToWrite, availableToRead, fmqSize);
         mCallback->onFilterStatus(newStatus);
         mFilterStatus = newStatus;
     }
@@ -487,7 +489,7 @@ void Filter::maySendFilterStatusCallback() {
 DemuxFilterStatus Filter::checkFilterStatusChange(uint32_t availableToWrite,
                                                   uint32_t availableToRead, uint32_t highThreshold,
                                                   uint32_t lowThreshold) {
-    ALOGV("%s", __FUNCTION__);
+    ALOGV("%s/%d", __FUNCTION__, __LINE__);
     if (availableToWrite == 0) {
         return DemuxFilterStatus::OVERFLOW;
     } else if (availableToRead > highThreshold) {
@@ -498,22 +500,16 @@ DemuxFilterStatus Filter::checkFilterStatusChange(uint32_t availableToWrite,
     return mFilterStatus;
 }
 
-void Filter::setFilterIdx(uint32_t idx) {
-    mFilterIdx = idx;
-}
-uint32_t Filter::getFilterIdx() {
-    return mFilterIdx;
-}
-
 uint16_t Filter::getTpid() {
-  //ALOGD("%s", __FUNCTION__);
+    ALOGV("%s/%d", __FUNCTION__, __LINE__);
     return mTpid;
 }
 
 void Filter::updateFilterOutput(vector<uint8_t> data) {
     std::lock_guard<std::mutex> lock(mFilterOutputLock);
     if (DEBUG_FILTER)
-        ALOGD("%s idx:%d data size:%d, mFilterOutput size:%dKB", __FUNCTION__, mFilterIdx, data.size(), mFilterOutput.size()/1024);
+        ALOGD("%s/%d mFilterId:%d data size:%d output size:%dKB", __FUNCTION__, __LINE__,
+        mFilterId, data.size(), mFilterOutput.size()/1024);
 
     mFilterOutput.insert(mFilterOutput.end(), data.begin(), data.end());
 }
@@ -521,7 +517,7 @@ void Filter::updateFilterOutput(vector<uint8_t> data) {
 void Filter::updateRecordOutput(vector<uint8_t> data) {
     std::lock_guard<std::mutex> lock(mRecordFilterOutputLock);
     if (DEBUG_FILTER)
-        ALOGD("%s idx:%d data size:%d", __FUNCTION__, mFilterIdx, data.size());
+        ALOGD("%s/%d mFilterId:%d data size:%d", __FUNCTION__, __LINE__, mFilterId, data.size());
 
     mRecordFilterOutput.insert(mRecordFilterOutput.end(), data.begin(), data.end());
 }
@@ -529,7 +525,7 @@ void Filter::updateRecordOutput(vector<uint8_t> data) {
 Result Filter::startFilterHandler() {
     std::lock_guard<std::mutex> lock(mFilterOutputLock);
     if (DEBUG_FILTER)
-        ALOGD("%s filter idx:%d", __FUNCTION__, mFilterIdx);
+        ALOGD("%s/%d Filter id:%d", __FUNCTION__, __LINE__, mFilterId);
     switch (mType.mainType) {
         case DemuxFilterMainType::TS:
             switch (mType.subType.tsFilterType()) {
@@ -578,7 +574,7 @@ Result Filter::startFilterHandler() {
 
 Result Filter::startSectionFilterHandler() {
     if (DEBUG_FILTER)
-        ALOGD("%s/%d filter idx:%d", __FUNCTION__, __LINE__, mFilterIdx);
+        ALOGD("%s/%d mFilterId:%d", __FUNCTION__, __LINE__, mFilterId);
     if (mFilterOutput.empty()) {
         ALOGV("%s/%d mFilterOutput is empty!", __FUNCTION__, __LINE__);
         return Result::SUCCESS;
@@ -597,7 +593,7 @@ Result Filter::startSectionFilterHandler() {
 Result Filter::startPesFilterHandler() {
     std::lock_guard<std::mutex> lock(mFilterEventLock);
     if (DEBUG_FILTER)
-        ALOGI("%s/%d filter idx:%d", __FUNCTION__, __LINE__, mFilterIdx);
+        ALOGD("%s/%d mFilterId:%d", __FUNCTION__, __LINE__, mFilterId);
     if (mFilterOutput.empty()) {
         return Result::SUCCESS;
     }
@@ -664,7 +660,7 @@ Result Filter::startPesFilterHandler() {
 
 Result Filter::startTsFilterHandler() {
     if (DEBUG_FILTER)
-        ALOGD("%s/%d filter idx:%d TODO", __FUNCTION__, __LINE__, mFilterIdx);
+        ALOGD("%s/%d mFilterId:%d TODO", __FUNCTION__, __LINE__, mFilterId);
 
     // TODO handle starting TS filter
     return Result::SUCCESS;
@@ -674,12 +670,12 @@ Result Filter::startMediaFilterHandler() {
     std::lock_guard<std::mutex> lock(mFilterEventLock);
 
     if (mFilterOutput.size() > 0)
-        ALOGV("%s/%d Filter %d output size:%d KB", __FUNCTION__, __LINE__, mFilterIdx, mFilterOutput.size()/1024);
+        ALOGV("%s/%d mFilterId:%d output size:%d KB", __FUNCTION__, __LINE__, mFilterId, mFilterOutput.size()/1024);
 
 #ifdef TUNERHAL_DBG
     if (mFilterOutput.empty() || mFilterOutput.size() < mFilterEventSize) {
 #else
-	if (mFilterOutput.empty() || mFilterOutput.size() < 1024 * 1024 * 10) {//10MB
+    if (mFilterOutput.empty() || mFilterOutput.size() < 1024 * 1024 * 10) {//10MB
 #endif
         return Result::SUCCESS;
     }
@@ -694,7 +690,8 @@ Result Filter::startMediaFilterHandler() {
     if (avBuffer == NULL) {
        return Result::UNKNOWN_ERROR;
     }
-    ALOGD("%s/%d filter %d create mFilterEvent size:%d", __FUNCTION__, __LINE__, mFilterId, mFilterOutput.size());
+    ALOGD("%s/%d mFilterId:%d mFilterEvent size:%d", __FUNCTION__, __LINE__,
+    mFilterId, mFilterOutput.size());
     memcpy(avBuffer, mFilterOutput.data(), mFilterOutput.size() * sizeof(uint8_t));
 
     native_handle_t* nativeHandle = createNativeHandle(av_fd);
@@ -817,14 +814,14 @@ Result Filter::startMediaFilterHandler() {
 Result Filter::startRecordFilterHandler() {
     std::lock_guard<std::mutex> lock(mRecordFilterOutputLock);
     if (DEBUG_FILTER)
-        ALOGD("%s/%d filter idx:%d", __FUNCTION__, __LINE__, mFilterIdx);
+        ALOGD("%s/%d mFilterId:%d", __FUNCTION__, __LINE__, mFilterId);
 
     if (mRecordFilterOutput.empty()) {
         return Result::SUCCESS;
     }
 
     if (mDvr == nullptr || !mDvr->writeRecordFMQ(mRecordFilterOutput)) {
-        ALOGD("[Filter] dvr fails to write into record FMQ.");
+        ALOGD("[Filter] dvr fails to write into record FMQ!");
         return Result::UNKNOWN_ERROR;
     }
 
@@ -847,7 +844,7 @@ Result Filter::startRecordFilterHandler() {
 
 Result Filter::startPcrFilterHandler() {
     if (DEBUG_FILTER)
-        ALOGI("%s/%d filter idx:%d", __FUNCTION__, __LINE__, mFilterIdx);
+        ALOGI("%s/%d mFilterId:%d", __FUNCTION__, __LINE__, mFilterId);
 
     // TODO handle starting PCR filter
     return Result::SUCCESS;
@@ -855,7 +852,7 @@ Result Filter::startPcrFilterHandler() {
 
 Result Filter::startTemiFilterHandler() {
     if (DEBUG_FILTER)
-        ALOGD("%s/%d filter idx:%d", __FUNCTION__, __LINE__, mFilterIdx);
+        ALOGD("%s/%d mFilterId:%d", __FUNCTION__, __LINE__, mFilterId);
     // TODO handle starting TEMI filter
     return Result::SUCCESS;
 }
@@ -863,10 +860,10 @@ Result Filter::startTemiFilterHandler() {
 bool Filter::writeSectionsAndCreateEvent(vector<uint8_t> data) {
     // TODO check how many sections has been read
     std::lock_guard<std::mutex> lock(mFilterEventLock);
-    ALOGV("%s/%d filter idx:%d Create mFilterEvent size:%d", __FUNCTION__, __LINE__, mFilterIdx, data.size());
+    ALOGV("%s/%d mFilterId:%d Create mFilterEvent size:%d", __FUNCTION__, __LINE__, mFilterId, data.size());
 
     if (!writeDataToFilterMQ(data)) {
-        ALOGE("%s/%d filter id:%d writeDataToFilterMQ failed!", __FUNCTION__, __LINE__, mFilterId);
+        ALOGE("%s/%d mFilterId:%d writeDataToFilterMQ failed!", __FUNCTION__, __LINE__, mFilterId);
         return false;
     }
     int size = mFilterEvent.events.size();
@@ -892,12 +889,12 @@ bool Filter::writeDataToFilterMQ(const std::vector<uint8_t>& data) {
 }
 
 void Filter::attachFilterToRecord(const sp<Dvr> dvr) {
-    ALOGD("%s/%d filter idx:%d", __FUNCTION__, __LINE__, mFilterIdx);
+    ALOGD("%s/%d mFilterId:%d", __FUNCTION__, __LINE__, mFilterId);
     mDvr = dvr;
 }
 
 void Filter::detachFilterFromRecord() {
-    ALOGD("%s/%d filter idx:%d", __FUNCTION__, __LINE__, mFilterIdx);
+    ALOGD("%s/%d mFilterId:%d", __FUNCTION__, __LINE__, mFilterId);
     mDvr = nullptr;
 }
 
@@ -905,25 +902,25 @@ int Filter::createAvIonFd(int size) {
     // Create an ion fd and allocate an av fd mapped to a buffer to it.
     int ion_fd = ion_open();
     if (ion_fd == -1) {
-        ALOGE("[Filter] Failed to open ion fd %d", errno);
+        ALOGE("[Filter] Failed to open ion fd errno:%d!", errno);
         return -1;
     }
     int av_fd = -1;
     ion_alloc_fd(dup(ion_fd), size, 0 /*align*/, ION_HEAP_SYSTEM_MASK, 0 /*flags*/, &av_fd);
     if (av_fd == -1) {
-        ALOGE("[Filter] Failed to create av fd %d", errno);
+        ALOGE("[Filter] Failed to create av fd errno:%d!", errno);
         return -1;
     }
-    ALOGD("%s filter id:%d ion_alloc_fd:%d size:%d", __FUNCTION__, mFilterId, av_fd, size);
+    ALOGD("%s mFilterId:%d ion_alloc_fd:%d size:%d", __FUNCTION__, mFilterId, av_fd, size);
     return av_fd;
 }
 
 uint8_t* Filter::getIonBuffer(int fd, int size) {
-    ALOGD("%s/%d filter idx:%d fd:%d size:%d", __FUNCTION__, __LINE__, mFilterIdx, fd, size);
+    ALOGD("%s/%d mFilterId:%d fd:%d size:%d", __FUNCTION__, __LINE__, mFilterId, fd, size);
     uint8_t* avBuf = static_cast<uint8_t*>(
             mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0 /*offset*/));
     if (avBuf == MAP_FAILED) {
-        ALOGE("[Filter] fail to allocate buffer %d", errno);
+        ALOGE("[Filter] Failed to allocate buffer %d!", errno);
         return NULL;
     }
     return avBuf;
@@ -933,11 +930,11 @@ native_handle_t* Filter::createNativeHandle(int fd) {
     // Create a native handle to pass the av fd via the callback event.
     native_handle_t* nativeHandle = native_handle_create(/*numFd*/ 1, 0);
     if (nativeHandle == NULL) {
-        ALOGE("[Filter] Failed to create native_handle %d", errno);
+        ALOGE("[Filter] Failed to create native_handle errno:%d!", errno);
         return NULL;
     }
     nativeHandle->data[0] = dup(fd);
-    ALOGD("%s/%d filter idx:%d fd:%d nativeHandle fd:%d", __FUNCTION__, __LINE__, mFilterIdx, fd, nativeHandle->data[0]);
+    ALOGD("%s/%d mFilterId:%d fd:%d nativeHandle fd:%d", __FUNCTION__, __LINE__, mFilterId, fd, nativeHandle->data[0]);
 
     return nativeHandle;
 }

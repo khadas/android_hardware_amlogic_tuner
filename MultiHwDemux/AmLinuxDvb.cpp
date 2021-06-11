@@ -41,6 +41,7 @@
 AmLinuxDvd::AmLinuxDvd() {
     ALOGI("%s/%d", __FUNCTION__, __LINE__);
     mDvrFd = -1;
+    pollFailCount = 0;
 }
 
 AmLinuxDvd::~AmLinuxDvd() {
@@ -232,12 +233,17 @@ AM_ErrorCode_t AmLinuxDvd::dvb_poll(AM_DMX_Device *dev, AM_DMX_FilterMask_t *mas
 
     ret = poll(fds, cnt, timeout);
     if (ret <= 0) {
-        ALOGW("dvb_poll dmx dev timeout! cnt:%d fd[%d]:%d\n", cnt, i, fds[i].fd);
+        pollFailCount++;
+        if (pollFailCount % 20 == 0) {
+            ALOGE("dvb_poll error cnt:%d pollFailCount:%d (%s)",
+                cnt, pollFailCount, strerror(errno));
+        }
         return AM_DMX_ERR_TIMEOUT;
     }
 
     for (i = 0; i < cnt; i++) {
         if (fds[i].revents&(POLLIN|POLLERR)) {
+            pollFailCount = 0;
             //ALOGI("dvb_poll  i:%d cnt:%d fd:%d\n",i,cnt,fds[i].fd);
             AM_DMX_FILTER_MASK_SET(mask, fids[i]);
         }

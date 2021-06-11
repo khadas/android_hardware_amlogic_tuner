@@ -51,6 +51,7 @@ public:
     AM_ErrorCode_t dvr_read(uint8_t *buf, int *size);
 private:
     int mDvrFd;
+    int pollFailCount;
 };
 
 #endif

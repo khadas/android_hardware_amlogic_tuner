@@ -28,7 +28,6 @@ namespace V1_0 {
 namespace implementation {
 
 #define WAIT_TIMEOUT 3000000000
-#define TF_DEBUG_ENABLE_PASSTHROUGH "vendor.tf.enable.passthrough"
 #define TF_DEBUG_ENABLE_LOCAL_PLAY "vendor.tf.enable.localplay"
 static int mSupportLocalPlayer = 1;
 
@@ -55,13 +54,10 @@ Demux::Demux(uint32_t demuxId, sp<Tuner> tuner) {
         mDropLen, mFilterOutputTotalLen, mDropTsPktNum, mDumpEsData);
 #endif
     mSupportLocalPlayer = property_get_int32(TF_DEBUG_ENABLE_LOCAL_PLAY, 1);
-    mEnablePassthrough = property_get_int32(TF_DEBUG_ENABLE_PASSTHROUGH, 0);
     AmDmxDevice = new AM_DMX_Device();
     AmDmxDevice->dev_no = demuxId;
-    ALOGD("mDemuxId:%d mEnablePassthrough:%d, mSupportLocalPlayer = %d", mDemuxId, mEnablePassthrough, mSupportLocalPlayer);
-    if (mEnablePassthrough == 0) {
-        AmDmxDevice->AM_DMX_Open();
-    }
+    ALOGD("mDemuxId:%d mSupportLocalPlayer:%d", mDemuxId, mSupportLocalPlayer);
+    AmDmxDevice->AM_DMX_Open();
     mMediaSyncWrap = new MediaSyncWrap();
 }
 
@@ -219,22 +215,30 @@ Return<Result> Demux::setFrontendDataSource(uint32_t frontendId) {
 Return<void> Demux::openFilter(const DemuxFilterType& type, uint32_t bufferSize,
                                const sp<IFilterCallback>& cb, openFilter_cb _hidl_cb) {
     int dmxFilterIdx;
-    if (cb == nullptr) {
-        ALOGW("[Demux] callback can't be null!");
-        _hidl_cb(Result::INVALID_ARGUMENT, new Filter());
+    DemuxTsFilterType tsFilterType = type.subType.tsFilterType();
+    std::lock_guard<std::mutex> lock(mFilterLock);
+
+    if (tsFilterType == DemuxTsFilterType::UNDEFINED) {
+        ALOGE("[Demux] Invalid filter type!");
+        _hidl_cb(Result::INVALID_ARGUMENT, nullptr);
         return Void();
     }
-    ALOGD("%s/%d type:%d bufsize:%d KB", __FUNCTION__, __LINE__, type.subType.tsFilterType(), bufferSize/1024);
+    if (cb == nullptr) {
+        ALOGE("[Demux] Filter callback is null!");
+        _hidl_cb(Result::INVALID_ARGUMENT, nullptr);
+        return Void();
+    }
 
     AmDmxDevice->AM_DMX_AllocateFilter(&dmxFilterIdx);
+    ALOGD("[%s/%d] Allocate filter subType:%d filterIdx:%d", __FUNCTION__, __LINE__, tsFilterType, dmxFilterIdx);
+
     //Use demux fd as the tuner hal filter id
-    sp<Filter> filter = new Filter(type, (uint32_t)AmDmxDevice->filters[dmxFilterIdx].drv_data, bufferSize, cb, this);
-    //Use the demux filter id as the tuner hal filter index
-    filter.get()->setFilterIdx((uint32_t)dmxFilterIdx);
+    sp<Filter> filter = new Filter(type, dmxFilterIdx, bufferSize, cb, this);
+
     if (!filter->createFilterMQ()) {
-        ALOGE("[Demux] filter createFilterMQ error!");
-        _hidl_cb(Result::UNKNOWN_ERROR, filter);
+        ALOGE("[Demux] filter %d createFilterMQ error!", dmxFilterIdx);
         AmDmxDevice->AM_DMX_FreeFilter(dmxFilterIdx);
+        _hidl_cb(Result::UNKNOWN_ERROR, filter);
         return Void();
     }
 
@@ -248,29 +252,32 @@ Return<void> Demux::openFilter(const DemuxFilterType& type, uint32_t bufferSize,
         }
     }
 
-    if (!filter->isRecordFilter()) {
+    if (tsFilterType == DemuxTsFilterType::SECTION
+        || tsFilterType == DemuxTsFilterType::VIDEO
+        || tsFilterType == DemuxTsFilterType::AUDIO) {
         AmDmxDevice->AM_DMX_SetCallback(dmxFilterIdx, this->postData, this);
-    } else {
+    } else if (tsFilterType == DemuxTsFilterType::PCR) {
+        AmDmxDevice->AM_DMX_SetCallback(dmxFilterIdx, NULL, NULL);
+    } else if (tsFilterType == DemuxTsFilterType::RECORD) {
         AmDmxDevice->AM_DVR_SetCallback(this->postDvrData, this);
     }
 
     if (!mDvrOpened)
         mDvrOpened = true;
 
-    ALOGD("%s/%d filterIdx:%d", __FUNCTION__, __LINE__, filter.get()->getFilterIdx());
-
     mFilters[dmxFilterIdx] = filter;
-    //DemuxTsFilterType::PCR
-    if (filter->isPcrFilter()) {
+    if (tsFilterType == DemuxTsFilterType::PCR) {
         mPcrFilterIds.insert(dmxFilterIdx);
+        ALOGD("Insert pcr filter");
     }
     bool result = true;
-    if (!filter->isRecordFilter()) {
+
+    if (tsFilterType != DemuxTsFilterType::RECORD && tsFilterType != DemuxTsFilterType::PCR) {
         // Only save non-record filters for now. Record filters are saved when the
         // IDvr.attacheFilter is called.
         mPlaybackFilterIds.insert(dmxFilterIdx);
         if (mDvrPlayback != nullptr) {
-            ALOGI("%s mDvrPlayback->addPlaybackFilter filterIdx:%d", __FUNCTION__, dmxFilterIdx);
+            ALOGD("[%s/%d] addPlaybackFilter filterIdx:%d", __FUNCTION__, __LINE__, dmxFilterIdx);
             result = mDvrPlayback->addPlaybackFilter(dmxFilterIdx, filter);
         }
     }
@@ -290,13 +297,18 @@ Return<void> Demux::openTimeFilter(openTimeFilter_cb _hidl_cb) {
 
 Return<void> Demux::getAvSyncHwId(const sp<IFilter>& filter, getAvSyncHwId_cb _hidl_cb) {
     ALOGD("%s/%d", __FUNCTION__, __LINE__);
-
-    uint32_t avSyncHwId = -1;
-    int id;
     Result status;
 
+    int fid;
+    int avSyncHwId = -1;
+
+    if (filter == nullptr) {
+        ALOGE("[Demux] filter is null!");
+        _hidl_cb(Result::INVALID_STATE, avSyncHwId);
+        return Void();
+    }
     filter->getId([&](Result result, uint32_t filterId) {
-        id = filterId;
+        fid = filterId;
         status = result;
     });
 
@@ -306,8 +318,8 @@ Return<void> Demux::getAvSyncHwId(const sp<IFilter>& filter, getAvSyncHwId_cb _h
         return Void();
     }
 
-    if (!mFilters[id]->isMediaFilter()) {
-        ALOGE("[Demux] Given filter is not a media filter.");
+    if (!mFilters[fid]->isPcrFilter()) {
+        ALOGE("[Demux] Given filter is not a pcr filter!");
         _hidl_cb(Result::INVALID_ARGUMENT, avSyncHwId);
         return Void();
     }
@@ -316,11 +328,12 @@ Return<void> Demux::getAvSyncHwId(const sp<IFilter>& filter, getAvSyncHwId_cb _h
         // Return the lowest pcr filter id in the default implementation as the av sync id
         uint16_t pcrPid = getFilterTpid(*mPcrFilterIds.begin());
         avSyncHwId = mMediaSyncWrap->getAvSyncHwId(mDemuxId, pcrPid);
+        ALOGD("[Demux] mPcrFilterId:%d pcrPid:0x%x avSyncHwId:%d", *mPcrFilterIds.begin(), pcrPid, avSyncHwId);
         _hidl_cb(Result::SUCCESS, avSyncHwId);
         return Void();
     }
 
-    ALOGW("[Demux] No PCR filter opened.");
+    ALOGW("[Demux] No pcr filter opened.");
     _hidl_cb(Result::INVALID_STATE, avSyncHwId);
     return Void();
 }
@@ -343,7 +356,8 @@ Return<void> Demux::getAvSyncTime(AvSyncHwId avSyncHwId, getAvSyncTime_cb _hidl_
 }
 
 Return<Result> Demux::close() {
-    ALOGD("%s/%d mDemuxId:%d", __FUNCTION__, __LINE__, mDemuxId);
+    ALOGD("[%s/%d] mDemuxId:%d", __FUNCTION__, __LINE__, mDemuxId);
+    std::lock_guard<std::mutex> lock(mFilterLock);
 
     set<uint32_t>::iterator it;
     for (it = mPlaybackFilterIds.begin(); it != mPlaybackFilterIds.end(); it++) {
@@ -351,8 +365,10 @@ Return<Result> Demux::close() {
     }
     mPlaybackFilterIds.clear();
     mRecordFilterIds.clear();
+    mPcrFilterIds.clear();
     mFilters.clear();
     mLastUsedFilterId = -1;
+
     mDvrOpened = false;
 
     return Result::SUCCESS;
@@ -365,9 +381,10 @@ Return<void> Demux::openDvr(DvrType type, uint32_t bufferSize, const sp<IDvrCall
         _hidl_cb(Result::INVALID_ARGUMENT, new Dvr());
         return Void();
     }
+    std::lock_guard<std::mutex> lock(mFilterLock);
+
     //bufferSize is used to create DvrMQ
     ALOGD("%s/%d bufferSize:%d KB", __FUNCTION__, __LINE__,  bufferSize/1024);
-
     set<uint32_t>::iterator it;
     switch (type) {
         case DvrType::PLAYBACK:
@@ -377,7 +394,6 @@ Return<void> Demux::openDvr(DvrType type, uint32_t bufferSize, const sp<IDvrCall
                 _hidl_cb(Result::UNKNOWN_ERROR, mDvrPlayback);
                 return Void();
             }
-
             for (it = mPlaybackFilterIds.begin(); it != mPlaybackFilterIds.end(); it++) {
                 if (!mDvrPlayback->addPlaybackFilter(*it, mFilters[*it])) {
                     ALOGE("[Demux] Can't get filter info for DVR playback");
@@ -419,7 +435,9 @@ Return<Result> Demux::disconnectCiCam() {
 }
 
 Result Demux::removeFilter(uint32_t filterId) {
+
     ALOGD("%s/%d", __FUNCTION__, __LINE__);
+    std::lock_guard<std::mutex> lock(mFilterLock);
 
     if (mDvrPlayback != nullptr) {
         mDvrPlayback->removePlaybackFilter(filterId);
@@ -432,12 +450,11 @@ Result Demux::removeFilter(uint32_t filterId) {
 }
 
 void Demux::startBroadcastTsFilter(vector<uint8_t> data) {
-    ALOGV("%s/%d size:%d", __FUNCTION__, __LINE__, data.size());
+    std::lock_guard<std::mutex> lock(mFilterLock);
 
     uint16_t pid = ((data[1] & 0x1f) << 8) | ((data[2] & 0xff));
-    if (DEBUG_DEMUX) {
-        ALOGD("[Demux] start ts filter pid: %d", pid);
-    }
+    if (DEBUG_DEMUX)
+        ALOGD("%s/%d size:%d pid:0x%x", __FUNCTION__, __LINE__, data.size(), pid);
     set<uint32_t>::iterator it;
     for (it = mPlaybackFilterIds.begin(); it != mPlaybackFilterIds.end(); it++) {
         if (pid == mFilters[*it]->getTpid()) {
@@ -452,6 +469,7 @@ void Demux::startBroadcastTsFilter(vector<uint8_t> data) {
 }
 
 void Demux::sendFrontendInputToRecord(vector<uint8_t> data) {
+    std::lock_guard<std::mutex> lock(mFilterLock);
     set<uint32_t>::iterator it;
     if (DEBUG_DEMUX) {
         ALOGW("[Demux] update record filter output");
@@ -462,6 +480,7 @@ void Demux::sendFrontendInputToRecord(vector<uint8_t> data) {
 }
 
 bool Demux::startBroadcastFilterDispatcher() {
+    std::lock_guard<std::mutex> lock(mFilterLock);
     set<uint32_t>::iterator it;
 
     // Handle the output data per filter type
@@ -475,6 +494,7 @@ bool Demux::startBroadcastFilterDispatcher() {
 }
 
 bool Demux::startRecordFilterDispatcher() {
+    std::lock_guard<std::mutex> lock(mFilterLock);
     set<uint32_t>::iterator it;
 
     for (it = mRecordFilterIds.begin(); it != mRecordFilterIds.end(); it++) {
@@ -487,6 +507,7 @@ bool Demux::startRecordFilterDispatcher() {
 }
 
 Result Demux::startFilterHandler(uint32_t filterId) {
+    std::lock_guard<std::mutex> lock(mFilterLock);
     if (DEBUG_DEMUX)
         ALOGD("%s/%d filterId:%d", __FUNCTION__, __LINE__, filterId);
     //Create mFilterEvent with mFilterOutput
@@ -494,6 +515,7 @@ Result Demux::startFilterHandler(uint32_t filterId) {
 }
 
 void Demux::updateFilterOutput(uint16_t filterId, vector<uint8_t> data) {
+    std::lock_guard<std::mutex> lock(mFilterLock);
     if (DEBUG_DEMUX)
         ALOGD("%s/%d filterId:%d", __FUNCTION__, __LINE__, filterId);
     //Copy data to mFilterOutput
@@ -501,6 +523,7 @@ void Demux::updateFilterOutput(uint16_t filterId, vector<uint8_t> data) {
 }
 
 uint16_t Demux::getFilterTpid(uint32_t filterId) {
+    std::lock_guard<std::mutex> lock(mFilterLock);
     return mFilters[filterId]->getTpid();
 }
 
@@ -557,6 +580,7 @@ void Demux::setIsRecording(bool isRecording) {
 
 bool Demux::attachRecordFilter(int filterId) {
     ALOGD("%s/%d", __FUNCTION__, __LINE__);
+    std::lock_guard<std::mutex> lock(mFilterLock);
 
     if (mFilters[filterId] == nullptr || mDvrRecord == nullptr ||
         !mFilters[filterId]->isRecordFilter()) {
@@ -571,6 +595,7 @@ bool Demux::attachRecordFilter(int filterId) {
 
 bool Demux::detachRecordFilter(int filterId) {
     ALOGD("%s/%d", __FUNCTION__, __LINE__);
+    std::lock_guard<std::mutex> lock(mFilterLock);
 
     if (mFilters[filterId] == nullptr || mDvrRecord == nullptr) {
         return false;

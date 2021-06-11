@@ -93,8 +93,6 @@ class Filter : public IFilter {
     bool isPcrFilter() { return mIsPcrFilter; };
     bool isRecordFilter() { return mIsRecordFilter; };
     void fillDataToDecoder();
-    void setFilterIdx(uint32_t idx);
-    uint32_t getFilterIdx();
 
   private:
     // Tuner service
@@ -107,7 +105,6 @@ class Filter : public IFilter {
     sp<IFilterCallback> mCallback;
 
     uint32_t mFilterId;
-    uint32_t mFilterIdx;
     uint32_t mBufferSize;
     DemuxFilterType mType;
     bool mIsMediaFilter = false;

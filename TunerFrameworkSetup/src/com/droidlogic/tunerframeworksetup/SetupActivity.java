@@ -6,6 +6,7 @@ import android.content.DialogInterface;
 import android.media.AudioTrack;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
+import android.media.MediaCodecInfo.CodecCapabilities;
 import android.media.MediaCodecList;
 import android.media.MediaCrypto;
 import android.media.MediaExtractor;
@@ -145,6 +146,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private Filter mVideoFilter = null;
     private Filter mAudioFilter = null;
     private Filter mDvrFilter   = null;
+    private Filter mPcrFilter = null;
     private DvrPlayback mDvrPlayback = null;
     private Tuner mTuner = null;
     private ArrayList<ProgramInfo> programs = new ArrayList<ProgramInfo>();
@@ -279,6 +281,11 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private String mVideoMimeType = MediaCodecPlayer.TEST_MIME_TYPE;
     private String mAudioMimeType = MediaCodecPlayer.AUDIO_MIME_TYPE;
     private boolean mPassthroughMode = false;
+    private int mAvSyncHwId = 0;
+    private int mDemuxId = 0;
+    public int mVideoFilterId = 0;
+    public int mAudioFilterId = 0;
+
     MediaFormat mVideoMediaFormat = null;
     MediaFormat mAudioMediaFormat = null;
 
@@ -1167,12 +1174,14 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     }
 
     private void searchStop() {
+
         if (mPatSectionFilter != null) {
             mPatSectionFilter.stop();
         }
         if (mPmtSectionFilter != null) {
             mPmtSectionFilter.stop();
         }
+
         if (mTuner != null) {
             mTuner.cancelScanning();
         }
@@ -1182,7 +1191,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private void playStart(boolean bTuner) {
         Log.d(TAG, "playStart, new MediaCodecPlayer and set av media format");
         if (mMediaCodecPlayer == null) {
-            mMediaCodecPlayer = new MediaCodecPlayer(SetupActivity.this, mSurface, MediaCodecPlayer.PLAYER_MODE_TUNER, mVideoMimeType, null, mPassthroughMode);
+            mMediaCodecPlayer = new MediaCodecPlayer(SetupActivity.this, mSurface, MediaCodecPlayer.PLAYER_MODE_TUNER, mVideoMimeType, null, mPassthroughMode, mIsCasPlayback);
         }
         if (mMediaCodecPlayer.isStarted()) {
             Log.d(TAG, "playStart already");
@@ -1389,16 +1398,23 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private FilterCallback mEcmFilterCallback = new FilterCallback() {
         @Override
         public void onFilterEvent(Filter filter, FilterEvent[] events) {
-            if (mDebugFilter)
+        int waitRetry = 150;
+            if (mDebugMediaCas)
                 Log.d(TAG, "onEcmFilterEvent" + " filter id:" + filter.getId());
-            if (mLicenseReceived.get() == false) {
+            while (mLicenseReceived.get() == false) {
+                if (waitRetry % 10 == 0)
+                    Log.w(TAG, "Waiting for cas license!");
                 try {
-                    Thread.sleep(100);
+                    Thread.sleep(20);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
-                Log.w(TAG, "Waiting for cas license!");
-                return;
+                if (waitRetry-- == 0) {
+                    Log.e(TAG, "Get license timeout!");
+                    return;
+                }
+
+                continue;
             }
             if (mPlayerStart.get() == false) {
                 Log.d(TAG, "mPlayerStart is false" + " filter id:" + filter.getId());
@@ -1561,6 +1577,13 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                 Log.w(TAG, "audio ecm filter  is null!");
         }
 
+        if (mIsCasPlayback && mDescrambler == null) {
+            mDescrambler = mTuner.openDescrambler();
+            Log.d(TAG, "openDescrambler");
+            mDescrambler.addPid(Descrambler.PID_TYPE_T, mEsCasInfo[VIDEO_CHANNEL_INDEX].mEsPid, mVideoFilter == null ? null : mVideoFilter);
+            mDescrambler.addPid(Descrambler.PID_TYPE_T, mEsCasInfo[AUDIO_CHANNEL_INDEX].mEsPid, mAudioFilter == null ? null : mAudioFilter);
+        }
+
         if (filter_id == mEsCasInfo[VIDEO_CHANNEL_INDEX].mEcmSectionFilter[0].getId()
             || filter_id == mEsCasInfo[VIDEO_CHANNEL_INDEX].mEcmSectionFilter[1].getId()) {
             mCasIdx = VIDEO_CHANNEL_INDEX;
@@ -1571,25 +1594,6 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
             Log.e(TAG, "Invalid ecm filter id, not found!");
             return;
         }
-        //stopEcmSectionFilter(mCasIdx, filter_id);
-        if (mHasSetKeyToken.get() == false) {
-            mDescrambler = mTuner.openDescrambler();
-            Log.d(TAG, "openDescrambler");
-        }
-
-        if (mVideoFilter == null && mEsCasInfo[VIDEO_CHANNEL_INDEX].mEsPid != 0x1FFF) {
-            if (mPassthroughMode == false) {
-                mVideoFilter = openVideoFilter(mEsCasInfo[VIDEO_CHANNEL_INDEX].mEsPid);
-            }
-            mDescrambler.addPid(Descrambler.PID_TYPE_T, mEsCasInfo[VIDEO_CHANNEL_INDEX].mEsPid, mVideoFilter == null ? null : mVideoFilter);
-        }
-        if (mCasSupportAudio && mAudioFilter == null && mEsCasInfo[AUDIO_CHANNEL_INDEX].mEsPid != 0x1FFF) {
-            if (mPassthroughMode == false) {
-                mAudioFilter = openAudioFilter(mEsCasInfo[AUDIO_CHANNEL_INDEX].mEsPid);
-            }
-            mDescrambler.addPid(Descrambler.PID_TYPE_T, mEsCasInfo[AUDIO_CHANNEL_INDEX].mEsPid, mAudioFilter == null ? null : mAudioFilter);
-        }
-
         byte[] ecm_data = new byte[168];
         System.arraycopy(data, 3, ecm_data, 0, mSectionLen);
 
@@ -1635,12 +1639,12 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         if (mPlayerStart.get() == false) {
             Log.d(TAG, "Ready to start Player");
 
-            if (mVideoFilter != null) {
+            if (mDvrPlayback != null && mVideoFilter != null && !mPassthroughMode) {
                 mDvrPlayback.attachFilter(mVideoFilter);
                 mVideoFilter.start();
             }
 
-            if (mCasSupportAudio && mAudioFilter != null) {
+            if (mDvrPlayback != null && mCasSupportAudio && mAudioFilter != null && !mPassthroughMode) {
                 mDvrPlayback.attachFilter(mAudioFilter);
                 mAudioFilter.start();
             }
@@ -1711,6 +1715,8 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         pmtInfo.mReserved_3 = (data[8] & 0xff) >> 5;
         //PCR_PID ((data[8] << 8) | data[9]) & 0x1FFF
         pmtInfo.mPcrPid = (data[8] & 0x1f) << 8 | data[9];
+        Log.d(TAG, "pcrPid:" + pmtInfo.mPcrPid);
+
         pmtInfo.mReserved_4 = (data[10] & 0xff) >> 4;
         int secDataLen = pmtInfo.mSectionLength + 3;
         pmtInfo.mCRC_32 = (data[secDataLen - 4] & 0x000000ff) << 24
@@ -1892,6 +1898,25 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         return;
     }
 
+    private void passthroughSetup() {
+        Log.d(TAG, "passthroughSetup");
+        if (mVideoFilter != null) {
+            mVideoFilterId = mVideoFilter.getId();
+            Log.d(TAG, "mVideoFilterId:" + mVideoFilterId);
+        }
+        if (mAudioFilter != null) {
+            mAudioFilterId = mAudioFilter.getId();
+            Log.d(TAG, "mAudioFilterId:" + mAudioFilterId);
+        }
+        Log.d(TAG, "mAvSyncHwId:" + mAvSyncHwId + " mVideoFilterId:" + mVideoFilterId);
+        mVideoMediaFormat.setInteger("vendor.passthoughMode.video-filter-id", mVideoFilterId);
+        if (mAvSyncHwId != 0)
+            mAvSyncHwId = mAvSyncHwId | (1 << 16);
+        mVideoMediaFormat.setInteger("audio-hw-sync", mAvSyncHwId);
+        //mVideoMediaFormat.setInteger(MediaFormat.KEY_HARDWARE_AV_SYNC_ID, mAvSyncHwId);//"hw-av-sync-id", support with Codec2
+        mVideoMediaFormat.setFeatureEnabled(CodecCapabilities.FEATURE_TunneledPlayback, true);
+    }
+
     private void parseSectionData(byte[] data) {
         int mTableId = data[0];
         int mSectionLen = ((((int)(data[1])) & 0x03 << 8) & 0xff) + (((int)data[2]) & 0xff);
@@ -2011,6 +2036,9 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                 }
                 if (unInitProg == null) {
                     Log.d(TAG, "Find all programs, stop pmt filter");
+                    mVideoMediaFormat = MediaFormat.createVideoFormat(mVideoMimeType, 1280, 720);
+                    mAudioMediaFormat = MediaFormat.createAudioFormat(mAudioMimeType, MediaCodecPlayer.AUDIO_SAMPLE_RATE, MediaCodecPlayer.AUDIO_CHANNEL_COUNT);
+
                     mTaskHandler.sendEmptyMessage(TASK_MSG_STOP_SECTION);
                 } else {
                     Log.d(TAG, "Start to parse next program");
@@ -2035,8 +2063,17 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                 }
                 parsePMTSection(mPmtInfo, data);
                 Log.d(TAG, "Find programs down");
+
+                mPcrFilter = openPcrFilter(mPmtInfo.mPcrPid);
+                if (mPcrFilter != null) {
+                    Log.d(TAG, "Open pcr filter success");
+                    mAvSyncHwId = mTuner.getAvSyncHwId(mPcrFilter);
+                } else
+                    Log.e(TAG, "mPcrFilter is null!");
+
                 mVideoMediaFormat = MediaFormat.createVideoFormat(mVideoMimeType, 1280, 720);
                 mAudioMediaFormat = MediaFormat.createAudioFormat(mAudioMimeType, MediaCodecPlayer.AUDIO_SAMPLE_RATE, MediaCodecPlayer.AUDIO_CHANNEL_COUNT);
+
                 mTaskHandler.sendEmptyMessage(TASK_MSG_STOP_SECTION);
             }
 
@@ -2045,25 +2082,39 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                 return;
             }
 
-            if (!mIsCasPlayback  && mEnableLocalPlay) {
+            if (mEnableLocalPlay) {
                 if (mEsCasInfo[VIDEO_CHANNEL_INDEX].mEsPid != 0x1FFF && mEsCasInfo[VIDEO_CHANNEL_INDEX].mEsPid > 0) {
-                    if (mPassthroughMode) {
-                        //Filter filter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_PCR, 1024 * 1024, mExecutor, mfilterCallback);
-                        mVideoMediaFormat.setInteger("videoPid", mEsCasInfo[VIDEO_CHANNEL_INDEX].mEsPid);
-//                        mVideoMediaFormat.setInteger("videoFilterId", mVideoFilter.getId());
-                        mVideoMediaFormat.setInteger("avSyncHwId", mPmtInfo.mPcrPid/*mTuner.getAvSyncHwId(mVideoFilter)*//*-1*/);
-                    } else {
-                        mVideoFilter = openVideoFilter(mEsCasInfo[VIDEO_CHANNEL_INDEX].mEsPid);
+                    mVideoFilter = openVideoFilter(mEsCasInfo[VIDEO_CHANNEL_INDEX].mEsPid);
+                    if (mVideoFilter == null)
+                        Log.e(TAG, "mVideoFilter is null!");
+                }
+                if (mEsCasInfo[AUDIO_CHANNEL_INDEX].mEsPid != 0x1FFF && mEsCasInfo[AUDIO_CHANNEL_INDEX].mEsPid > 0) {
+                    mAudioFilter = openAudioFilter(mEsCasInfo[AUDIO_CHANNEL_INDEX].mEsPid);
+                    if (mAudioFilter == null)
+                        Log.e(TAG, "mAudioFilter is null!");
+                }
+                if (mPassthroughMode) {
+                    passthroughSetup();
+                } else if (!mIsCasPlayback) {
+                    //For non-passthrough clear playback, start av filter in tuner hal
+                    if (mVideoFilter != null) {
                         mVideoFilter.start();
-                        if (mEsCasInfo[AUDIO_CHANNEL_INDEX].mEsPid != 0x1FFF && mEsCasInfo[AUDIO_CHANNEL_INDEX].mEsPid > 0) {
-                            mAudioFilter = openAudioFilter(mEsCasInfo[AUDIO_CHANNEL_INDEX].mEsPid);
-                            //mAudioFilter.start();
-                        }
+                    }
+                    if (mAudioFilter != null) {
+                        //mAudioFilter.start();
                     }
                 }
+            }
+
+            if (!mIsCasPlayback) {
+                //For non-passthrough/passthrough clear playback, config and start mediacodec
                 playStart(false);
                 mPlayerStart.set(true);
-            } else if (mEnableLocalPlay){
+            } else {
+                //For non-passthrough/passthrough cas playback
+                //Create media cas instance
+                //Provision and request license
+                //Start ecm section filter
                 setLicenseListener(SetupActivity.this);
                 try {
                     testWidevineCasPlayback(MediaCodecPlayer.TEST_MIME_TYPE);
@@ -2089,7 +2140,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     }
 
     private void startSectionFilter(int pid, int tid) {
-    Log.d(TAG, "Start section filter pid: 0x" + Integer.toHexString(pid) + " table id: 0x" + Integer.toHexString(tid));
+        Log.d(TAG, "Start section filter pid: 0x" + Integer.toHexString(pid) + " table id: 0x" + Integer.toHexString(tid));
         if (mTuner == null) {
             Log.e(TAG, "mTuner is null!");
             return;
@@ -2164,8 +2215,8 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         SectionSettingsWithSectionBits settings =
         SectionSettingsWithSectionBits
                 .builder(Filter.TYPE_TS)
-                .setCrcEnabled(true)
-                .setRepeat(false)
+                .setCrcEnabled(false)
+                .setRepeat(true)
                 .setRaw(false)
                 .setFilter(new byte[]{tableId, 0, 0})
                 .setMask(new byte[]{mask, 0, 0, 0})
@@ -2229,12 +2280,27 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                         public void onClick(DialogInterface dialogInterface, int i) {
                             Log.d(TAG, "Close channel list window");
                             if (!mEnableLocalPlay && !mIsCasPlayback) {
-                                mVideoFilter = openVideoFilter(mEsCasInfo[VIDEO_CHANNEL_INDEX].mEsPid);
-                                mVideoFilter.start();
-                                if (mEsCasInfo[AUDIO_CHANNEL_INDEX].mEsPid != 0x1FFF && mEsCasInfo[AUDIO_CHANNEL_INDEX].mEsPid > 0) {
-                                    mAudioFilter = openAudioFilter(mEsCasInfo[AUDIO_CHANNEL_INDEX].mEsPid);
-                                    //mAudioFilter.start();
-                                }
+                                if (mEsCasInfo[VIDEO_CHANNEL_INDEX].mEsPid != 0x1FFF && mEsCasInfo[VIDEO_CHANNEL_INDEX].mEsPid > 0) {
+                                     mVideoFilter = openVideoFilter(mEsCasInfo[VIDEO_CHANNEL_INDEX].mEsPid);
+                                     if (mVideoFilter == null)
+                                         Log.e(TAG, "mVideoFilter is null!");
+                                 }
+                                 if (mEsCasInfo[AUDIO_CHANNEL_INDEX].mEsPid != 0x1FFF && mEsCasInfo[AUDIO_CHANNEL_INDEX].mEsPid > 0) {
+                                     mAudioFilter = openAudioFilter(mEsCasInfo[AUDIO_CHANNEL_INDEX].mEsPid);
+                                     if (mAudioFilter == null)
+                                         Log.e(TAG, "mAudioFilter is null!");
+                                 }
+                                 if (mPassthroughMode) {
+                                     passthroughSetup();
+                                 } else {
+                                     //For non-passthrough clear playback, start av filter in tuner hal
+                                     if (mVideoFilter != null) {
+                                         mVideoFilter.start();
+                                     }
+                                     if (mAudioFilter != null) {
+                                         //mAudioFilter.start();
+                                     }
+                                 }
                                 playStart(true);
                                 mPlayerStart.set(true);
                             }
@@ -2245,9 +2311,10 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     }
 
     private Filter openVideoFilter(int pid) {
-        Log.d(TAG, "Open video filter pid: 0x" + Integer.toHexString(pid));
+         Log.d(TAG, "Open video filter pid: 0x" + Integer.toHexString(pid));
+         long vFilterBufSize = 1024 * 1024 * 10;
 
-         Filter filter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_VIDEO, 1024 * 1024 * 10, mExecutor, mfilterCallback);
+         Filter filter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_VIDEO, vFilterBufSize, mExecutor, mfilterCallback);
          Settings videoSettings = AvSettings
         .builder(Filter.TYPE_TS, false)
         .setPassthrough(mPassthroughMode)
@@ -2265,7 +2332,9 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
 
     private Filter openAudioFilter(int pid) {
         Log.d(TAG, "Open audio filter pid: 0x" + Integer.toHexString(pid));
-        Filter filter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_AUDIO, 1024 * 1024, mExecutor, mfilterCallback);
+        long aFilterBufSize = 1024 * 1024;
+
+        Filter filter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_AUDIO, aFilterBufSize, mExecutor, mfilterCallback);
          Settings audioSettings = AvSettings
         .builder(Filter.TYPE_TS, true)
         .setPassthrough(mPassthroughMode)
@@ -2281,6 +2350,21 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
          return filter;
     }
 
+    private Filter openPcrFilter(int pcrPid) {
+        Log.d(TAG, "openPcrFilter pcrPid:0x" + Integer.toHexString(pcrPid));
+        Filter filter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_PCR, 32 * 1024, mExecutor, mfilterCallback);
+        if (filter != null) {
+            FilterConfiguration pcrConfig = TsFilterConfiguration
+                    .builder()
+                    .setTpid(pcrPid)
+                    .setSettings(null)
+                    .build();
+            filter.configure(pcrConfig);
+//            filter.start();
+        }
+        return filter;
+    }
+
     private DvrSettings getDvrSettings() {
         return DvrSettings
                 .builder()
@@ -2293,7 +2377,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     }
 
     private Filter openDvrFilter(int vpid) {
-    Log.d(TAG, "openDvrFilter");
+        Log.d(TAG, "openDvrFilter");
         Filter filter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_RECORD, 1024 * 1024 * 10 * 20, mExecutor, mfilterCallback);
         if (filter != null) {
             Settings settings = RecordSettings
@@ -2398,7 +2482,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private void startDvrPlayback() throws Exception {
         Log.d(TAG, "startDvrPlayback. TS source:" + mTsFile.getText().toString());
 
-        mTestLocalFile = new File("/data/" + mTsFile.getText().toString());
+        mTestLocalFile = new File(mTsFile.getText().toString());
         mTestFd = ParcelFileDescriptor.open(mTestLocalFile, ParcelFileDescriptor.MODE_READ_ONLY);
         if (mTestFd == null) {
             Log.e(TAG, "mTestFd is null!");
@@ -2444,6 +2528,10 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         if (mAudioFilter != null) {
             Log.d(TAG, "mAudioFilter stop");
             mAudioFilter.stop();
+        }
+        if (mPcrFilter != null) {
+            mPcrFilter.stop();
+            Log.d(TAG, "mPcrFilter stop");
         }
         if (mDvrFilter != null) {
             mDvrRecorder.detachFilter(mDvrFilter);

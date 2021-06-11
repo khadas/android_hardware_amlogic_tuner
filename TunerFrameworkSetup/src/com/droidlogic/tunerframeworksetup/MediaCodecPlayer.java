@@ -43,6 +43,7 @@ public class MediaCodecPlayer {
     private String mPlayerMimeType = null;
     private String mPlayerPath = null;
     private boolean mIsPassthrough = false;
+    private boolean mIsSecurePlayback = false;
     private Context mContext = null;
     private Surface mSurface = null;
     private boolean mStarted = false;
@@ -60,13 +61,14 @@ public class MediaCodecPlayer {
     private InputSlotListener mInputSlotListener = null;
     private OutputSlotListener mOutputSlotListener = null;
 
-    public MediaCodecPlayer(Context context, Surface surface, String playerMode, String playerMimeType, String playerPath, boolean isPassThrough) {
+    public MediaCodecPlayer(Context context, Surface surface, String playerMode, String playerMimeType, String playerPath, boolean isPassThrough, boolean isSecurePlayback) {
         this.mContext = context;
         this.mSurface = surface;
         this.mPlayerMode = playerMode;
         this.mPlayerMimeType = playerMimeType;
         this.mPlayerPath = playerPath;
         this.mIsPassthrough = isPassThrough;
+        this.mIsSecurePlayback = isSecurePlayback;
     }
 
     public void setMediaCodecPlayerCallback(MediaCodecPlayerStatus mediaCodecPlayerStatus) {
@@ -279,7 +281,7 @@ public class MediaCodecPlayer {
                 .setLastBufferTimestampUs(null)
                 .setObtainBlockForEachBuffer(true)
                 .setTimestampQueue(timestampList)
-                .setContentEncrypted(false)
+                .setContentEncrypted(mIsSecurePlayback)
                 .build();
 
         mOutputSlotListener = new SurfaceOutputSlotListener(timestampList, null);
@@ -379,7 +381,7 @@ public class MediaCodecPlayer {
                 .setLastBufferTimestampUs(null)
                 .setObtainBlockForEachBuffer(true)
                 .setTimestampQueue(timestampList)
-                .setContentEncrypted(false)
+                .setContentEncrypted(mIsSecurePlayback)
                 .build();
 
         mOutputSlotListener = new SurfaceOutputSlotListener(timestampList, null);
@@ -615,7 +617,12 @@ public class MediaCodecPlayer {
     private void startVideoMediaCodec() {
         Log.d(TAG, "Start video MediaCodec mMediaFormat = " + mMediaFormat);
         //mMediaFormat = MediaFormat.createVideoFormat(MediaCodecPlayer.TEST_MIME_TYPE, 720, 576);
-        mMediaCodec.configure(mMediaFormat, mSurface, null, MediaCodec.CONFIGURE_FLAG_USE_BLOCK_MODEL);
+        //If this codec is to be used with LinearBlock and/or HardwareBuffer, pass CONFIGURE_FLAG_USE_BLOCK_MODEL flag
+
+        if (!mIsPassthrough)
+            mMediaCodec.configure(mMediaFormat, mSurface, null, MediaCodec.CONFIGURE_FLAG_USE_BLOCK_MODEL);
+        else
+            mMediaCodec.configure(mMediaFormat, mSurface, null, 0);
         mMediaCodec.start();
     }
 
@@ -623,7 +630,10 @@ public class MediaCodecPlayer {
         //mAudioMediaFormat.setInteger(MediaFormat.KEY_AAC_PROFILE, AUDIO_AAC_PROFILE);
         //mAudioMediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, AUDIO_BIT_RATE);
         Log.d(TAG, "Start audio MediaCodec mAudioMediaFormat = " + mAudioMediaFormat);
-        mAudioMediaCodec.configure(mAudioMediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_USE_BLOCK_MODEL);
+        if (!mIsPassthrough)
+            mAudioMediaCodec.configure(mAudioMediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_USE_BLOCK_MODEL);
+        else
+            mAudioMediaCodec.configure(mAudioMediaFormat, null, null, 0);
         mAudioMediaCodec.start();
     }
 
@@ -656,7 +666,10 @@ public class MediaCodecPlayer {
                     continue;
                 }
                 if (caps.isFormatSupported(format)) {
-                    result.add(codecInfo.getName());
+                    if (!mIsSecurePlayback || !mIsPassthrough)
+                        result.add(codecInfo.getName());
+                    else
+                        result.add(codecInfo.getName() + ".secure");
                     break;
                 }
             }
