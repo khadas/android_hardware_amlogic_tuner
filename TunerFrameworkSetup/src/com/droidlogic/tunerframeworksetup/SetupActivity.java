@@ -18,6 +18,12 @@ import android.media.tv.tuner.Tuner;
 import android.media.tv.tuner.frontend.FrontendSettings;
 import android.media.tv.tuner.frontend.FrontendStatus;
 import android.media.tv.tuner.frontend.DvbtFrontendSettings;
+import android.media.tv.tuner.frontend.DvbcFrontendSettings;
+import android.media.tv.tuner.frontend.DvbsFrontendSettings;
+import android.media.tv.tuner.frontend.DvbsCodeRate;
+import android.media.tv.tuner.frontend.AtscFrontendSettings;
+import android.media.tv.tuner.frontend.AnalogFrontendSettings;
+import android.media.tv.tuner.frontend.IsdbtFrontendSettings;
 import android.media.tv.tuner.frontend.OnTuneEventListener;
 import android.media.tv.tuner.frontend.ScanCallback;
 import android.media.tv.tuner.frontend.Atsc3PlpInfo;
@@ -55,8 +61,12 @@ import android.view.SurfaceView;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
+import android.widget.AdapterView;
+import android.widget.AdapterView.OnItemSelectedListener;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.Spinner;
 import android.widget.TextView;
 
 import java.io.IOException;
@@ -110,6 +120,14 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private EditText mAudioPid = null;
     private EditText mPcrPid = null;
     private EditText mTsFile = null;
+    private EditText mSymbol = null;
+
+    private Spinner mSpinnerStreamMode = null;
+    private Spinner mSpinnerScanMode = null;
+    private LinearLayout mLayoutFrequency = null;
+    private LinearLayout mLayoutScanmode = null;
+    private LinearLayout mLayoutLocalFile = null;
+    private LinearLayout mLayoutSymbol = null;
 
     private Surface mSurface;
     private ClickListener mClickListener = null;
@@ -272,6 +290,9 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private boolean mCasSupportAudio = false;
     private boolean mEnableLocalPlay = true;
 
+    private String mScanMode = "Dvbt";
+    private String mStreamMode = "tuner";
+
     private static final String DVR_PROP_MQ_SIZE = "vendor.tf.dvrmq.size";
     private static final String DVR_PROP_READ_TSPKT_NUM = "vendor.tf.dvr.tspkt_num";
     private static final String DVR_PROP_READ_DATA_DURATION = "vendor.tf.dvr.read.duration";
@@ -298,11 +319,6 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         Log.d(TAG, "New tuner executor and tuner");
 
         mExecutor = new TunerExecutor();
-        mTuner = new Tuner(getApplicationContext(),
-                           null/*tvInputSessionId*/,
-                           200/*PRIORITY_HINT_USE_CASE_TYPE_SCAN*/);
-        Log.d(TAG, "mTuner:" + mTuner);
-        mTuner.setOnTuneEventListener(mExecutor, this);
 
         String mEnablePassthrough = getPropString("getprop " + TF_PROP_ENABLE_PASSTHROUGH);
         if (mEnablePassthrough != null && mEnablePassthrough.length() > 0)
@@ -336,10 +352,6 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         mDvrHighThreshold = mDvrMQSize_MB * 1024 * 1024 * 8 / 10;
         Log.d(TAG, "Get [mDvrPlayback & mDvrRecorder] with [mTuner & mExecutor], and config with DvrSettings");
 
-        mDvrPlayback = mTuner.openDvrPlayback(mDvrMQSize_MB * 1024 * 1024, mExecutor, this);
-        mDvrPlayback.configure(getDvrSettings());
-        mDvrRecorder = mTuner.openDvrRecorder(mDvrMQSize_MB * 1024 * 1024, mExecutor, this);
-        mDvrRecorder.configure(getDvrSettings());
         try {
             Log.d(TAG, "Create temp file");
             tmpFile = File.createTempFile("tuner", "dvr_test");
@@ -435,6 +447,13 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         mAudioPid = (EditText)findViewById(R.id.audio_pid);
         mPcrPid = (EditText)findViewById(R.id.pcr_pid);
         mTsFile = (EditText)findViewById(R.id.ts_file);
+        mSymbol = (EditText)findViewById(R.id.edit_symbol);
+        mSpinnerStreamMode = (Spinner)findViewById(R.id.spinner_stream_mode);
+        mSpinnerScanMode = (Spinner)findViewById(R.id.spinner_scan_mode);
+        mLayoutFrequency = (LinearLayout)findViewById(R.id.layout_frequency);
+        mLayoutScanmode = (LinearLayout)findViewById(R.id.layout_scanmode);
+        mLayoutLocalFile = (LinearLayout)findViewById(R.id.layout_local_file);
+        mLayoutSymbol = (LinearLayout)findViewById(R.id.layout_symbol);
     }
 
     private void initListener() {
@@ -452,8 +471,75 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         mAudioPid.setText(getParameter("audio"));
         mPcrPid.setText(getParameter("pcr"));
         mTsFile.setText(getParameter("ts"));
-        if (!TextUtils.isEmpty(getParameter("frequency"))) {
-            mSearchStart.requestFocus();
+        mSpinnerStreamMode.setOnItemSelectedListener(new OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
+                boolean localMode = (i > 0);
+                enableLocalMode(localMode);
+                int tunerVisble = View.GONE;
+                int localVisible = View.VISIBLE;
+                if (!localMode) {
+                    tunerVisble = View.VISIBLE;
+                    localVisible = View.GONE;
+                }
+                mLayoutFrequency.setVisibility(tunerVisble);
+                mLayoutScanmode.setVisibility(tunerVisble);
+                mSearchStart.setVisibility(tunerVisble);
+                mPlayStop.setVisibility(tunerVisble);
+                mStatus.setVisibility(tunerVisble);
+                mLayoutLocalFile.setVisibility(localVisible);
+                mLocalPlayStart.setVisibility(localVisible);
+                mLocalPlayStop.setVisibility(localVisible);
+                mLayoutSymbol.setVisibility(View.GONE);
+                if (!localMode) {
+                    if ("Dvbc".equals(mScanMode)) {
+                        mLayoutSymbol.setVisibility(View.VISIBLE);
+                        mSymbol.setHint(6900);
+                    } else if ("Dvbs".equals(mScanMode)) {
+                        mLayoutSymbol.setVisibility(View.VISIBLE);
+                        mSymbol.setHint(27500);
+                    }
+                }
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> adapterView) {
+            }
+        });
+        mSpinnerScanMode.setOnItemSelectedListener(new OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
+                mScanMode = getResources().getStringArray(R.array.scan_modes)[i];
+                if ("Dvbc".equals(mScanMode)) {
+                    mLayoutSymbol.setVisibility(View.VISIBLE);
+                    mSymbol.setHint("6900");
+                } else if ("Dvbs".equals(mScanMode)) {
+                    mLayoutSymbol.setVisibility(View.VISIBLE);
+                    mSymbol.setHint("27500");
+                } else {
+                    mLayoutSymbol.setVisibility(View.GONE);
+                }
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> adapterView) {
+            }
+        });
+        int selection = 0;
+        try {
+            selection = Integer.parseInt(getParameter("mode"));
+        } catch (Exception e) {
+        }
+        mSpinnerScanMode.setSelection(selection);
+    }
+
+    private void enableLocalMode(boolean enable) {
+        if (enable) {
+            mStreamMode = "local";
+            mEnableLocalPlay = true;
+        } else {
+            mStreamMode = "tuner";
+            mEnableLocalPlay = false;
         }
     }
 
@@ -464,6 +550,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         putParameter("audio", mAudioPid.getText().toString());
         putParameter("pcr", mPcrPid.getText().toString());
         putParameter("ts", mTsFile.getText().toString());
+        putParameter("mode", "" + mSpinnerScanMode.getSelectedItemPosition());
     }
 
     private void initHandler() {
@@ -944,18 +1031,138 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     }
 
     private void searchStart() {
-        FrontendSettings feSettings = DvbtFrontendSettings
-            .builder()
-            .setFrequency(Integer.parseInt(mFrequency.getText().toString())  * 1000000)
-            .setTransmissionMode(DvbtFrontendSettings.TRANSMISSION_MODE_UNDEFINED)
-            .setBandwidth(DvbtFrontendSettings.BANDWIDTH_UNDEFINED)
-            .setConstellation(DvbtFrontendSettings.CONSTELLATION_QPSK)
-            .setHierarchy(DvbtFrontendSettings.HIERARCHY_UNDEFINED)
-            .setHighPriorityCodeRate(DvbtFrontendSettings.CODERATE_UNDEFINED)
-            .setLowPriorityCodeRate(DvbtFrontendSettings.CODERATE_UNDEFINED)
-            .setGuardInterval(DvbtFrontendSettings.GUARD_INTERVAL_UNDEFINED)
-            .build();
-        mTuner.scan(feSettings, Tuner.SCAN_TYPE_AUTO, mExecutor, this);
+        FrontendSettings feSettings = null;
+        int freqMhz = 0;
+        try {
+            freqMhz = Integer.parseInt(mFrequency.getText().toString());
+        } catch (Exception e) {
+        }
+        if (freqMhz == 0) {
+            Log.w(TAG, "No frequency");
+            mUiHandler.sendMessage(mUiHandler.obtainMessage(UI_MSG_STATUS, "Frequency invalid"));
+            return;
+        }
+        switch (mScanMode) {
+            case "Dvbt":
+            case "Dvbt2": {
+                feSettings = DvbtFrontendSettings
+                .builder()
+                .setFrequency(freqMhz  * 1000000)
+                .setStandard("Dvbt2".equals(mScanMode) ?
+                                DvbtFrontendSettings.STANDARD_T2 : DvbtFrontendSettings.STANDARD_T)
+                .setPlpMode(DvbtFrontendSettings.PLP_MODE_AUTO)
+                .build();
+            }
+            break;
+            case "Dvbc": {
+                int symbol = 6900;
+                try {
+                    symbol = Integer.parseInt(mSymbol.getText().toString());
+                } catch (Exception e) {
+                }
+                feSettings = DvbcFrontendSettings
+                .builder()
+                .setFrequency(freqMhz  * 1000000)
+                .setAnnex(DvbcFrontendSettings.ANNEX_A)
+                .setSymbolRate(symbol*1000)
+                .build();
+            }
+            break;
+            case "Dvbs":
+            case "Dvbs2": {
+                int symbol = 27500;
+                try {
+                    symbol = Integer.parseInt(mSymbol.getText().toString());
+                } catch (Exception e) {
+                }
+                DvbsCodeRate codeRate = DvbsCodeRate.builder()
+                    .setInnerFec(FrontendSettings.FEC_AUTO)
+                    .setLinear(false)
+                    .setShortFrameEnabled(true)
+                    .setBitsPer1000Symbol(0)
+                    .build();
+                feSettings = DvbsFrontendSettings
+                .builder()
+                .setFrequency(freqMhz  * 1000000)
+                .setSymbolRate(symbol*1000)
+                .setStandard("Dvbs2".equals(mScanMode) ?
+                                DvbsFrontendSettings.STANDARD_S2 : DvbsFrontendSettings.STANDARD_S)
+                .setCodeRate(codeRate)
+                .build();
+            }
+            break;
+            case "Analog": {
+                feSettings = AnalogFrontendSettings
+                .builder()
+                .setFrequency(freqMhz  * 1000000)
+                .setSignalType(AnalogFrontendSettings.SIGNAL_TYPE_NTSC)
+                .setSifStandard(AnalogFrontendSettings.SIF_M)
+                .build();
+            }
+            break;
+            case "Atsc": {
+                feSettings = AtscFrontendSettings
+                .builder()
+                .setFrequency(freqMhz  * 1000000)
+                .setModulation(AtscFrontendSettings.MODULATION_MOD_8VSB)
+                .build();
+            }
+            break;
+            case "Isdbt": {
+                feSettings = IsdbtFrontendSettings
+                .builder()
+                .setFrequency(freqMhz  * 1000000)
+                .setModulation(IsdbtFrontendSettings.MODULATION_AUTO)
+                .setBandwidth(IsdbtFrontendSettings.BANDWIDTH_6MHZ)
+                .build();
+            }
+            break;
+        }
+        if (feSettings != null) {
+            boolean createTuner = false;
+            if (mTuner == null) {
+                createTuner = true;
+            } else {
+                searchStop();
+                if (mPatInfo != null) {
+                    mPatInfo.mPrograms.clear();
+                }
+                if (mPmtInfo != null) {
+                    mPmtInfo.mPmtStreams.clear();
+                }
+                programs.clear();
+                if ((mTuner.getFrontendInfo() == null)
+                    || (mTuner.getFrontendInfo().getType() != feSettings.getType())) {
+                    mTuner.setOnTuneEventListener(mExecutor, null);
+                    mTuner.close();
+                    if (mDvrPlayback != null) {
+                        mDvrPlayback.stop();
+                        mDvrPlayback.close();
+                        mDvrPlayback = null;
+                        mDvrFilter = null;
+                    }
+                    mPatSectionFilter = null;
+                    mPmtSectionFilter = null;
+                    mVideoFilter = null;
+                    mAudioFilter = null;
+                }
+            }
+            if (createTuner) {
+                if (mTuner == null) {
+                    mTuner = new Tuner(getApplicationContext(),
+                                       null/*tvInputSessionId*/,
+                                       200/*PRIORITY_HINT_USE_CASE_TYPE_SCAN*/);
+                    Log.d(TAG, "mTuner created:" + mTuner);
+                    mTuner.setOnTuneEventListener(mExecutor, this);
+                    mDvrPlayback = mTuner.openDvrPlayback(mDvrMQSize_MB * 1024 * 1024, mExecutor, this);
+                    mDvrPlayback.configure(getDvrSettings());
+                }
+            }
+            mTuner.scan(feSettings, Tuner.SCAN_TYPE_AUTO, mExecutor, this);
+        } else {
+            Log.e(TAG, "feSettings is null");
+            mUiHandler.sendMessage(mUiHandler.obtainMessage(UI_MSG_STATUS, "Error with fe settings"));
+        }
         Log.d(TAG, "searchStart");
     }
 
@@ -966,7 +1173,9 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         if (mPmtSectionFilter != null) {
             mPmtSectionFilter.stop();
         }
-        mTuner.cancelScanning();
+        if (mTuner != null) {
+            mTuner.cancelScanning();
+        }
         Log.d(TAG, "searchStop");
     }
 
@@ -997,19 +1206,83 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         mMediaCodecPlayer.startPlayer();
 
         if (bTuner) {
-            Log.d(TAG, "mFrequency:" + mFrequency.getText().toString() + "MHz");
-            FrontendSettings feSettings = DvbtFrontendSettings
-                .builder()
-                .setFrequency(Integer.parseInt(mFrequency.getText().toString())  * 1000000/*506000000*/)
-                .setTransmissionMode(DvbtFrontendSettings.TRANSMISSION_MODE_AUTO)
-                .setBandwidth(DvbtFrontendSettings.BANDWIDTH_AUTO)
-                .setConstellation(DvbtFrontendSettings.CONSTELLATION_QPSK)
-                .setHierarchy(DvbtFrontendSettings.HIERARCHY_AUTO)
-                .setHighPriorityCodeRate(DvbtFrontendSettings.CODERATE_AUTO)
-                .setLowPriorityCodeRate(DvbtFrontendSettings.CODERATE_AUTO)
-                .setGuardInterval(DvbtFrontendSettings.GUARD_INTERVAL_AUTO)
-                .build();
-            mTuner.tune(feSettings);
+            Log.d(TAG, "Frequency:" + mFrequency.getText().toString() + "MHz");
+            int freqMhz = 0;
+            try {
+                freqMhz = Integer.parseInt(mFrequency.getText().toString());
+            } catch (Exception e) {
+            }
+            FrontendSettings feSettings = null;
+            switch (mScanMode) {
+                case "Dvbt":
+                case "Dvbt2": {
+                    feSettings = DvbtFrontendSettings
+                    .builder()
+                    .setFrequency(freqMhz  * 1000000)
+                    .setStandard("Dvbt2".equals(mScanMode) ?
+                                    DvbtFrontendSettings.STANDARD_T2 : DvbtFrontendSettings.STANDARD_T)
+                    .setPlpMode(DvbtFrontendSettings.PLP_MODE_AUTO)
+                    .build();
+                }
+                break;
+                case "Dvbc": {
+                    int symbol = 6900;
+                    try {
+                        symbol = Integer.parseInt(mSymbol.getText().toString());
+                    } catch (Exception e) {
+                    }
+                    feSettings = DvbcFrontendSettings
+                    .builder()
+                    .setFrequency(freqMhz  * 1000000)
+                    .setAnnex(DvbcFrontendSettings.ANNEX_A)
+                    .setSymbolRate(symbol*1000)
+                    .build();
+                }
+                break;
+                case "Dvbs":
+                case "Dvbs2": {
+                    int symbol = 27500;
+                    try {
+                        symbol = Integer.parseInt(mSymbol.getText().toString());
+                    } catch (Exception e) {
+                    }
+                    DvbsCodeRate codeRate = DvbsCodeRate.builder()
+                        .setInnerFec(FrontendSettings.FEC_AUTO)
+                        .setLinear(false)
+                        .setShortFrameEnabled(true)
+                        .setBitsPer1000Symbol(0)
+                        .build();
+                    feSettings = DvbsFrontendSettings
+                    .builder()
+                    .setFrequency(freqMhz  * 1000000)
+                    .setSymbolRate(symbol*1000)
+                    .setStandard("Dvbs2".equals(mScanMode) ?
+                                    DvbsFrontendSettings.STANDARD_S2 : DvbsFrontendSettings.STANDARD_S)
+                    .setCodeRate(codeRate)
+                    .build();
+                }
+                break;
+                case "Analog": {
+                    //not support this type to play
+                }
+                break;
+                case "Atsc": {
+                    //not support this type to play
+                }
+                break;
+                case "Isdbt": {
+                    feSettings = IsdbtFrontendSettings
+                    .builder()
+                    .setFrequency(freqMhz  * 1000000)
+                    .setModulation(IsdbtFrontendSettings.MODULATION_AUTO)
+                    .setBandwidth(IsdbtFrontendSettings.BANDWIDTH_AUTO)
+                    .build();
+                }
+                break;
+            }
+            if (feSettings != null) {
+                mTuner.tune(feSettings);
+            }
         }
     }
 
@@ -1024,20 +1297,28 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
 //TASK_MSG_STOP_PLAY
     private void playStop() {
         Log.d(TAG, "playStop");
-        if (mVideoFilter != null)
-            mDvrPlayback.detachFilter(mVideoFilter);
-        if (mAudioFilter != null)
-            mDvrPlayback.detachFilter(mAudioFilter);
-
-        if (mTuner != null) {
-            mTuner.cancelTuning();
+        if (mDvrPlayback != null) {
+            if (mVideoFilter != null)
+                mDvrPlayback.detachFilter(mVideoFilter);
+            if (mAudioFilter != null)
+                mDvrPlayback.detachFilter(mAudioFilter);
         }
+
         if (mMediaCodecPlayer != null) {
             mMediaCodecPlayer.stopPlayer();
+            if (MediaCodecPlayer.PLAYER_MODE_TUNER.equals(mMediaCodecPlayer.getPlayerMode())) {
+                //comment it when using tuner data
+                //clearResource();
+            }
         }
-        if (MediaCodecPlayer.PLAYER_MODE_TUNER.equals(mMediaCodecPlayer.getPlayerMode())) {
-            //comment it when using tuner data
-            //clearResource();
+        if (mVideoFilter != null) {
+            mVideoFilter.stop();
+        }
+        if (mAudioFilter != null) {
+            mAudioFilter.stop();
+        }
+        if (mTuner != null) {
+            mTuner.cancelTuning();
         }
     }
 
@@ -1841,8 +2122,6 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         if (tid == PAT_TID) {
             if (mPatSectionFilter != null) {
                 mPatSectionFilter.stop();
-                mPatSectionFilter.close();
-                mPatSectionFilter = null;
             }
             Log.d(TAG, "Open mPatSectionFilter");
             mPatSectionFilter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_SECTION, 32 * 1024, mExecutor, mfilterCallback);
@@ -1851,8 +2130,6 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         } else if (tid == PMT_TID) {
             if (mPmtSectionFilter != null) {
                 mPmtSectionFilter.stop();
-                mPmtSectionFilter.close();
-                mPmtSectionFilter = null;
             }
             Log.d(TAG, "Open mPmtSectionFilter");
             if (mPmtSectionFilter == null) {
@@ -1935,7 +2212,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                         @Override
                         public void onClick(DialogInterface dialogInterface, int i) {
                             playProgram(programs.get(i));
-							mPlayerStart.set(true);
+                            mPlayerStart.set(true);
                         }
                     });
             builder.create().show();
@@ -2036,8 +2313,19 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     }
 
     private void startDvrRecorder(int vpid) throws Exception {
-    Log.d(TAG, "startDvrRecorder");
+        Log.d(TAG, "startDvrRecorder");
         ParcelFileDescriptor fd = ParcelFileDescriptor.open(tmpFile, ParcelFileDescriptor.MODE_READ_WRITE);
+        if (mTuner == null) {
+            mTuner = new Tuner(getApplicationContext(),
+                               null/*tvInputSessionId*/,
+                               200/*PRIORITY_HINT_USE_CASE_TYPE_SCAN*/);
+            Log.d(TAG, "mTuner created:" + mTuner);
+            mTuner.setOnTuneEventListener(mExecutor, this);
+        }
+        if (mDvrRecorder == null) {
+            mDvrRecorder = mTuner.openDvrRecorder(mDvrMQSize_MB * 1024 * 1024, mExecutor, this);
+            mDvrRecorder.configure(getDvrSettings());
+        }
         mDvrRecorder.setFileDescriptor(fd);
         mDvrFilter = openDvrFilter(vpid);
         mDvrRecorder.attachFilter(mDvrFilter);
@@ -2119,6 +2407,17 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         Log.d(TAG, "mTestFd: " + mTestFd.getFd());
         mTestFileDescriptor = mTestFd.getFileDescriptor();
 
+        if (mTuner == null) {
+            mTuner = new Tuner(getApplicationContext(),
+                               null/*tvInputSessionId*/,
+                               200/*PRIORITY_HINT_USE_CASE_TYPE_SCAN*/);
+            Log.d(TAG, "mTuner created:" + mTuner);
+            mTuner.setOnTuneEventListener(mExecutor, this);
+        }
+        if (mDvrPlayback == null) {
+            mDvrPlayback = mTuner.openDvrPlayback(mDvrMQSize_MB * 1024 * 1024, mExecutor, this);
+            mDvrPlayback.configure(getDvrSettings());
+        }
         mDvrPlayback.setFileDescriptor(mTestFd);
         startSectionFilter(PAT_PID, PAT_TID);
 
@@ -2167,6 +2466,9 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
             mTuner.cancelTuning();
             mTuner.close();
             mTuner = null;
+            mVideoFilter = null;
+            mAudioFilter = null;
+            mDvrFilter = null;
             Log.d(TAG, "mTuner close");
         }
         for (int mCasIdx = 0; mCasIdx < mCasSessionNum; mCasIdx ++) {
@@ -2368,10 +2670,12 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     public void onLocked() {
         Log.d(TAG, "onLocked, try to build psi");
         mUiHandler.sendMessage(mUiHandler.obtainMessage(UI_MSG_STATUS, "scan locked"));
-        Message msg = mTaskHandler.obtainMessage(TASK_MSG_PULL_SECTION);
-        msg.arg1 = 0;
-        msg.arg2 = 0;
-        mTaskHandler.sendMessage(msg);
+        if (!"Analog".equals(mScanMode)) {
+            Message msg = mTaskHandler.obtainMessage(TASK_MSG_PULL_SECTION);
+            msg.arg1 = 0;
+            msg.arg2 = 0;
+            mTaskHandler.sendMessage(msg);
+        }
     }
     @Override
     public void onScanStopped() {
@@ -2387,6 +2691,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         if (mTuner != null) {
             if (!mTuner.getFrontendStatus(new int[]{FrontendStatus.FRONTEND_STATUS_TYPE_RF_LOCK}).isRfLocked()) {
                 Log.d(TAG, "unlock, should stop");
+                mUiHandler.sendMessage(mUiHandler.obtainMessage(UI_MSG_STATUS, "scan unlock"));
                 searchStop();
             } else {
                 Log.d(TAG, "locked, waiting to build psi.");

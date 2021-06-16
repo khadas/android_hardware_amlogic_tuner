@@ -62,7 +62,7 @@ Tuner::Tuner() {
             for (int i = 0; i < arrayFronts.size(); i ++) {
                 if (!arrayFronts[i]["type"].isNull()) {
                     int frontType = arrayFronts[i]["type"].asInt();
-                    int id = arrayFronts[i]["id"].asInt();
+                    int id = i;
                     int hwId = arrayFronts[i]["hwid"].asInt();
                     HwFeCaps_t hwCaps;
                     hwCaps.id = hwId;

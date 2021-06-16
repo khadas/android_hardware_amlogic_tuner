@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "droidlogic_frontend"
+
 #include <utils/Log.h>
 //#include <fcntl.h>
 #include "HwFeState.h"

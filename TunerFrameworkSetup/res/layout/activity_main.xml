@@ -12,18 +12,39 @@
         android:layout_width="0dp"
         android:layout_height="match_parent"
         android:layout_margin="10dp"
-        android:layout_weight="4" />
+        android:layout_weight="7" />
 
     <LinearLayout
         android:id="@+id/button_container"
         android:layout_width="0dp"
         android:layout_height="match_parent"
         android:layout_margin="5dp"
-        android:layout_weight="1"
-        android:gravity="center"
+        android:layout_weight="2"
         android:orientation="vertical">
 
         <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="StreamMode:"/>
+
+            <Spinner
+                android:id="@+id/spinner_stream_mode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:entries="@array/stream_modes" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/layout_frequency"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
@@ -52,7 +73,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:visibility="gone">
 
             <TextView
                 android:id="@+id/text_video_pid"
@@ -77,7 +99,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:visibility="gone">
 
             <TextView
                 android:id="@+id/text_audio_pid"
@@ -102,7 +125,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:visibility="gone">
 
             <TextView
                 android:id="@+id/text_pcr_pid"
@@ -124,10 +148,12 @@
         </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/layout_local_file"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:visibility="gone">
 
             <TextView
                 android:id="@+id/text_ts_file"
@@ -147,6 +173,55 @@
                 android:text=""/>
         </LinearLayout>
 
+        <LinearLayout
+            android:id="@+id/layout_symbol"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Symbol:"/>
+
+            <EditText
+                android:id="@+id/edit_symbol"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ems="10"
+                android:gravity="center"
+                android:hint="number"
+                android:inputType="number"
+                android:text=""/>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/layout_scanmode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Scan Mode:"/>
+
+            <Spinner
+                android:id="@+id/spinner_scan_mode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:entries="@array/scan_modes" />
+
+        </LinearLayout>
+
         <Button
             android:id="@+id/search_start"
             android:layout_width="match_parent"
@@ -157,13 +232,15 @@
             android:id="@+id/search_stop"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="search stop"/>
+            android:text="search stop"
+            android:visibility="gone"/>
 
         <Button
             android:id="@+id/play_start"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="play start"/>
+            android:text="play start"
+            android:visibility="gone"/>
 
         <Button
             android:id="@+id/play_stop"
@@ -175,13 +252,15 @@
             android:id="@+id/local_play_start"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="local play start"/>
+            android:text="local play start"
+            android:visibility="gone"/>
 
         <Button
             android:id="@+id/local_play_stop"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="local play stop"/>
+            android:text="local play stop"
+            android:visibility="gone"/>
 
         <TextView
             android:id="@+id/status"
