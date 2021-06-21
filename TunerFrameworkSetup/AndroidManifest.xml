@@ -11,6 +11,10 @@
     <uses-permission android:name="android.permission.ACCESS_TV_TUNER" />
     <uses-permission android:name="android.permission.READ_MEDIA_STORAGE"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.TUNER_RESOURCE_ACCESS"/>
+    <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS"/>
+    <uses-permission android:name="android.permission.CREATE_USERS"/>
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:allowBackup="true"
