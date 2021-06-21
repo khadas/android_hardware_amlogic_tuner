@@ -38,6 +38,18 @@ class Demux;
 class Descrambler;
 class HwFeState;
 
+#define NUMDEMX 4
+#define NUMRECORD 4
+#define NUMPLAYBACK 4
+#define NUMTSFILTER 32
+#define NUMSECTIONFILTER 32
+#define NUMAUDIOFILTER 32
+#define NUMVIDEOFILTER 32
+#define NUMPESFILTER 32
+#define NUMPCRFILTER 32
+#define NUMBYTESINSECTIONFILTER 16
+
+
 class Tuner : public ITuner {
   public:
     Tuner();

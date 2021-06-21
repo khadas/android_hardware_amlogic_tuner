@@ -256,8 +256,18 @@ Return<void> Tuner::getDemuxCaps(getDemuxCaps_cb _hidl_cb) {
     ALOGV("%s/%d", __FUNCTION__, __LINE__);
 
     DemuxCapabilities caps;
-    // IP filter can be an MMTP filter's data source.
-    caps.linkCaps = {0x00, 0x00, 0x02, 0x00, 0x00};
+    caps.numDemux                = NUMDEMX;
+    caps.numRecord               = NUMRECORD;
+    caps.numPlayback             = NUMPLAYBACK;
+    caps.numTsFilter             = NUMTSFILTER;
+    caps.numSectionFilter        = NUMSECTIONFILTER;
+    caps.numAudioFilter          = NUMAUDIOFILTER;
+    caps.numVideoFilter          = NUMVIDEOFILTER;
+    caps.numPesFilter            = NUMPESFILTER;
+    caps.numPcrFilter            = NUMPCRFILTER;
+    caps.numBytesInSectionFilter = NUMBYTESINSECTIONFILTER;
+    // ts filter can be an ts filter's data source.
+    caps.linkCaps = {0x02, 0x00, 0x00, 0x00, 0x00};
     _hidl_cb(Result::SUCCESS, caps);
     return Void();
 }
