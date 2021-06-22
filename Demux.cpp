@@ -28,6 +28,7 @@ namespace V1_0 {
 namespace implementation {
 
 #define WAIT_TIMEOUT 3000000000
+#define PSI_MAX_SIZE 4096
 #define TF_DEBUG_ENABLE_LOCAL_PLAY "vendor.tf.enable.localplay"
 static int mSupportLocalPlayer = 1;
 
@@ -97,7 +98,7 @@ void Demux::postDvrData(void* demux) {
 void Demux::postData(void* demux, int fid, bool esOutput, bool passthrough) {
     vector<uint8_t> tmpData;
     vector<uint8_t> tmpSectionData;
-    int sectionSize = 188;
+    int sectionSize = PSI_MAX_SIZE;
     Demux *dmxDev = (Demux*)demux;
     ALOGV("[Demux] postData fid =%d esOutput:%d passthrough:%d", fid, esOutput, passthrough);
 

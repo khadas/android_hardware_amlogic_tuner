@@ -1375,7 +1375,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                     SectionEvent sectionEvent = (SectionEvent) event;
                     if (mDebugTsSection)
                         Log.d(TAG, "Receive section data, size=" + sectionEvent.getDataLength() + "version =" + sectionEvent.getVersion() + "sectionNum =" + sectionEvent.getSectionNumber());
-                    byte[] data = new byte[188];
+                    byte[] data = new byte[sectionEvent.getDataLength()];
                     if (filter != null) {
                         filter.read(data, 0, sectionEvent.getDataLength());
                         parseSectionData(data);
@@ -1428,7 +1428,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                     SectionEvent sectionEvent = (SectionEvent)event;
                     if (mDebugMediaCas)
                         Log.d(TAG, "Receive ecm section data, size=" + sectionEvent.getDataLength());
-                    byte[] data = new byte[168];
+                    byte[] data = new byte[sectionEvent.getDataLength()];
                     int secLen = sectionEvent.getDataLength();
                     filter.read(data, 0, secLen);
                     if (Arrays.equals(data, mCurEcmData)) {
