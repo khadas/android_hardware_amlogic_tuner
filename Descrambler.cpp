@@ -126,13 +126,14 @@ Return<Result> Descrambler::setKeyToken(const hidl_vec<uint8_t>& keyToken) {
         ALOGE("%s/%d Invalid crypto mode!", __FUNCTION__, __LINE__);
         return Result::INVALID_ARGUMENT;
     }
-    es_pid[VIDEO_CHANNEL_INDEX] = *(added_pid.begin());
-    if (added_pid.size() >= 2) {
-        es_pid[AUDIO_CHANNEL_INDEX] = *(++added_pid.begin());
+    if (added_pid.size() == 1) {
+        es_pid[VIDEO_CHANNEL_INDEX] = *(added_pid.begin());
+    } else if (added_pid.size() >= 2) {
+        es_pid[AUDIO_CHANNEL_INDEX] = *(added_pid.begin());
+        es_pid[VIDEO_CHANNEL_INDEX] = *(++added_pid.begin());
     }
-
     ALOGD("%s/%d es_pid[0]:0x%x es_pid[1]:0x%x", __FUNCTION__, __LINE__, es_pid[VIDEO_CHANNEL_INDEX], es_pid[AUDIO_CHANNEL_INDEX]);
-    if (Secure_CreateDscPipeline(mDscCtx, mDescramblerId, es_pid[VIDEO_CHANNEL_INDEX], es_pid[AUDIO_CHANNEL_INDEX], mAVBothEcm, mCasSessionId[cas_session_num - 1])) {
+    if (Secure_CreateDscPipeline(mDscCtx, mSourceDemuxId, es_pid[VIDEO_CHANNEL_INDEX], es_pid[AUDIO_CHANNEL_INDEX], mAVBothEcm, mCasSessionId[cas_session_num - 1])) {
         ALOGE("%s/%d Create cas dsc pipeline failed!", __FUNCTION__, __LINE__);
         return Result::INVALID_STATE;
     }

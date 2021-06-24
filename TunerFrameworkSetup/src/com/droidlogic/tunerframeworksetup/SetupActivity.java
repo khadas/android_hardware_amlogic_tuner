@@ -277,7 +277,6 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private AtomicBoolean mPlayerStart = new AtomicBoolean(false);
     private AtomicBoolean mLicenseReceived = new AtomicBoolean(false);
     private boolean mIsCasPlayback = false;
-    private byte[] mCurEcmData = new byte[168];
     private String mVideoMimeType = MediaCodecPlayer.TEST_MIME_TYPE;
     private String mAudioMimeType = MediaCodecPlayer.AUDIO_MIME_TYPE;
     private boolean mPassthroughMode = false;
@@ -1405,7 +1404,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private FilterCallback mEcmFilterCallback = new FilterCallback() {
         @Override
         public void onFilterEvent(Filter filter, FilterEvent[] events) {
-        int waitRetry = 150;
+            int waitRetry = 150;
             if (mDebugMediaCas)
                 Log.d(TAG, "onEcmFilterEvent" + " filter id:" + filter.getId());
             while (mLicenseReceived.get() == false) {
@@ -1420,7 +1419,6 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                     Log.e(TAG, "Get license timeout!");
                     return;
                 }
-
                 continue;
             }
             if (mPlayerStart.get() == false) {
@@ -1433,16 +1431,11 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                     Log.w(TAG, "Invalid filter event type:MediaEvent!");
                 } else if (event instanceof SectionEvent) {
                     SectionEvent sectionEvent = (SectionEvent)event;
-                    if (mDebugMediaCas)
-                        Log.d(TAG, "Receive ecm section data, size=" + sectionEvent.getDataLength());
-                    byte[] data = new byte[sectionEvent.getDataLength()];
                     int secLen = sectionEvent.getDataLength();
+                    if (mDebugMediaCas)
+                        Log.d(TAG, "Receive ecm section data, size=" + secLen);
+                    byte[] data = new byte[secLen];
                     filter.read(data, 0, secLen);
-                    if (Arrays.equals(data, mCurEcmData)) {
-                        //Log.d(TAG, "The same ecm, return");
-                        return;
-                    }
-                    System.arraycopy(data, 0, mCurEcmData, 0, secLen);
                     parseEcmSectionData(data, filter.getId());
                 } else if (event instanceof TsRecordEvent) {
                     TsRecordEvent tsRecEvent = (TsRecordEvent) event;
