@@ -296,6 +296,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private boolean mDumpVideoEs = false;
     private boolean mCasSupportAudio = false;
     private boolean mEnableLocalPlay = true;
+    private boolean mEnableDvr = false;
 
     private String mScanMode = "Dvbt";
     private String mStreamMode = "tuner";
@@ -312,6 +313,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private static final String TF_PROP_ENABLE_PASSTHROUGH = "vendor.tf.enable.passthrough";
     private static final String TF_PROP_DUMP_ES_DATA = "vendor.tf.dump.es";
     private static final String TF_DEBUG_ENABLE_LOCAL_PLAY = "vendor.tf.enable.localplay";
+    private static final String TF_PROP_ENABLE_DVR         = "vendor.tf.enable.dvr";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -358,6 +360,11 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         mDvrLowThreshold = mDvrMQSize_MB * 1024 * 1024 * 2 / 10;
         mDvrHighThreshold = mDvrMQSize_MB * 1024 * 1024 * 8 / 10;
         Log.d(TAG, "Get [mDvrPlayback & mDvrRecorder] with [mTuner & mExecutor], and config with DvrSettings");
+
+        String enableDvr = getPropString("getprop " + TF_PROP_ENABLE_DVR);
+        if (enableDvr != null && enableDvr.length() > 0)
+            mEnableDvr = Integer.parseInt(enableDvr) == 0 ? false : true;
+        Log.d(TAG, "mEnableDvr: " + mEnableDvr);
 
         try {
             Log.d(TAG, "Create temp file");
@@ -2296,10 +2303,19 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                                      //For non-passthrough clear playback, start av filter in tuner hal
                                      if (mVideoFilter != null) {
                                          mVideoFilter.start();
+                                         if (mEnableDvr) {                                     //start dvr recorder
+                                             try {
+                                                 Log.d(TAG, "start dvr recorder");
+                                                 startDvrRecorder(mEsCasInfo[VIDEO_CHANNEL_INDEX].mEsPid);
+                                             } catch (Exception e) {
+                                                 Log.e(TAG, "message"  + e);
+                                             }
+                                         }
                                      }
                                      if (mAudioFilter != null) {
                                          //mAudioFilter.start();
                                      }
+
                                  }
                                 playStart(true);
                                 mPlayerStart.set(true);
@@ -2605,6 +2621,14 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                 mVideoFilter.start();
                 mAudioFilter = openAudioFilter(apid);
                 //mAudioFilter.start();
+                //start dvr recorder
+                if (mEnableDvr) {
+                    try {
+                        startDvrRecorder(vpid);
+                    } catch (Exception e) {
+                        Log.e(TAG, "message"  + e);
+                    }
+                }
             }
         } else if (tuneEvent == 1) {
             Log.d(TAG, "tuner got no signal");

@@ -30,6 +30,8 @@
 //#include "AmHwMultiDemuxWrapper.h"
 #include "AmDmx.h"
 #include "MediaSyncWrap.h"
+#include "AmDvr.h"
+
 using namespace std;
 
 namespace android {
@@ -111,6 +113,7 @@ class Demux : public IDemux {
     sp<AM_DMX_Device> getAmDmxDevice();
     void attachDescrambler(uint32_t descramblerId, sp<Descrambler> descrambler);
     void detachDescrambler(uint32_t descramblerId);
+    sp<AmDvr> getAmDvrDevice();
 
   private:
     // Tuner service
@@ -208,8 +211,8 @@ class Demux : public IDemux {
     vector<uint8_t> mPesOutput;
     sp<AM_DMX_Device> AmDmxDevice;
     const bool DEBUG_DEMUX = false;
-    bool mDvrOpened;
     sp<MediaSyncWrap> mMediaSyncWrap;
+    sp<AmDvr> mAmDvrDevice;
 };
 
 }  // namespace implementation

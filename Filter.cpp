@@ -149,19 +149,19 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
                     if (isRaw) {
                         param.flags |= DMX_OUTPUT_RAW_MODE;
                     }
-                    if (settings.ts().filterSettings.section().condition.sectionBits().filter.size() < DMX_FILTER_SIZE) {
+                    if (settings.ts().filterSettings.section().condition.sectionBits().filter.size() <= DMX_FILTER_SIZE) {
                         memcpy(param.filter.filter, settings.ts().filterSettings
                                               .section().condition.sectionBits().filter.data(), settings.ts().filterSettings
                                               .section().condition.sectionBits().filter.size() * sizeof(uint8_t));
                     }
 
-                    if (settings.ts().filterSettings.section().condition.sectionBits().mask.size() < DMX_FILTER_SIZE) {
+                    if (settings.ts().filterSettings.section().condition.sectionBits().mask.size() <= DMX_FILTER_SIZE) {
                         memcpy(param.filter.mask, settings.ts().filterSettings
                           .section().condition.sectionBits().mask.data(), settings.ts().filterSettings
                           .section().condition.sectionBits().mask.size() * sizeof(uint8_t));
                     }
 
-                    if (settings.ts().filterSettings.section().condition.sectionBits().mode.size() < DMX_FILTER_SIZE) {
+                    if (settings.ts().filterSettings.section().condition.sectionBits().mode.size() <= DMX_FILTER_SIZE) {
                         memcpy(param.filter.mode, settings.ts().filterSettings
                           .section().condition.sectionBits().mode.data(), settings.ts().filterSettings
                           .section().condition.sectionBits().mode.size() * sizeof(uint8_t));
@@ -280,6 +280,7 @@ Return<Result> Filter::start() {
     if (mDemux->getAmDmxDevice()
         ->AM_DMX_StartFilter(mFilterId) != 0) {
         ALOGE("Start filter %d failed!", mFilterId);
+        return Result::UNAVAILABLE;
     }
 
     //return startFilterLoop();
@@ -826,7 +827,7 @@ Result Filter::startRecordFilterHandler() {
     }
 
     // Create tsRecEvent and send callback
-    ALOGD("[Filter] create tsRecEvent and send callback.");
+    ALOGD("[Filter] create tsRecEvent mTpid = %d and send callback.", mTpid);
     DemuxFilterTsRecordEvent tsRecEvent;
     DemuxPid demuxPid;
     demuxPid.tPid(static_cast<DemuxTpid>(mTpid));
@@ -837,7 +838,7 @@ Result Filter::startRecordFilterHandler() {
     int size = mFilterEvent.events.size();
     mFilterEvent.events.resize(size + 1);
     mFilterEvent.events[size].tsRecord(tsRecEvent);
-
+    fillDataToDecoder();
     mRecordFilterOutput.clear();
     return Result::SUCCESS;
 }

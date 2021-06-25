@@ -45,7 +45,6 @@ static int mDumpEsData = 0;
 Demux::Demux(uint32_t demuxId, sp<Tuner> tuner) {
     mDemuxId = demuxId;
     mTunerService = tuner;
-    mDvrOpened = false;
 #ifdef TUNERHAL_DBG
     mDropLen = 0;
     mFilterOutputTotalLen = 0;
@@ -60,14 +59,19 @@ Demux::Demux(uint32_t demuxId, sp<Tuner> tuner) {
     ALOGD("mDemuxId:%d mSupportLocalPlayer:%d", mDemuxId, mSupportLocalPlayer);
     AmDmxDevice->AM_DMX_Open();
     mMediaSyncWrap = new MediaSyncWrap();
+    mAmDvrDevice = new AmDvr(mDemuxId);
 }
 
 Demux::~Demux() {
     ALOGD("~Demux");
     if (AmDmxDevice != NULL) {
         AmDmxDevice->AM_DMX_Close();
-        AmDmxDevice->AM_dvr_Close();
         AmDmxDevice = NULL;
+    }
+
+    if (mAmDvrDevice != NULL) {
+        mAmDvrDevice->AM_DVR_Close();
+        mAmDvrDevice = NULL;
     }
 }
 
@@ -79,8 +83,8 @@ void Demux::postDvrData(void* demux) {
 
     dvrData.resize(size);
     cnt = size;
-    ret = dmxDev->getAmDmxDevice()->AM_DVR_Read(dvrData.data(), &cnt);
-    if (ret <= 0) {
+    ret = dmxDev->getAmDvrDevice()->AM_DVR_Read(dvrData.data(), &cnt);
+    if (ret != 0) {
         ALOGE("No data available from DVR");
         usleep(200 * 1000);
         return;
@@ -243,14 +247,12 @@ Return<void> Demux::openFilter(const DemuxFilterType& type, uint32_t bufferSize,
         return Void();
     }
 
-    if (!mDvrOpened) {
-        if (mSupportLocalPlayer) {
-            ALOGD("[Demux] dmx_dvr_open INPUT_LOCAL");
-            AmDmxDevice->dmx_dvr_open(INPUT_LOCAL);
-        } else if (filter->isRecordFilter()) {
-            ALOGD("[Demux] dmx_dvr_open INPUT_DEMOD");
-            AmDmxDevice->dmx_dvr_open(INPUT_DEMOD);
-        }
+    if (mSupportLocalPlayer) {
+        ALOGD("[Demux] dmx_dvr_open INPUT_LOCAL");
+        AmDmxDevice->dmx_dvr_open(INPUT_LOCAL);
+    } else if (filter->isRecordFilter()) {
+        ALOGD("[Demux] dmx_dvr_open INPUT_DEMOD");
+        mAmDvrDevice->AM_DVR_Open(INPUT_DEMOD);
     }
 
     if (tsFilterType == DemuxTsFilterType::SECTION
@@ -260,11 +262,8 @@ Return<void> Demux::openFilter(const DemuxFilterType& type, uint32_t bufferSize,
     } else if (tsFilterType == DemuxTsFilterType::PCR) {
         AmDmxDevice->AM_DMX_SetCallback(dmxFilterIdx, NULL, NULL);
     } else if (tsFilterType == DemuxTsFilterType::RECORD) {
-        AmDmxDevice->AM_DVR_SetCallback(this->postDvrData, this);
+        mAmDvrDevice->AM_DVR_SetCallback(this->postDvrData, this);
     }
-
-    if (!mDvrOpened)
-        mDvrOpened = true;
 
     mFilters[dmxFilterIdx] = filter;
     if (tsFilterType == DemuxTsFilterType::PCR) {
@@ -369,8 +368,6 @@ Return<Result> Demux::close() {
     mPcrFilterIds.clear();
     mFilters.clear();
     mLastUsedFilterId = -1;
-
-    mDvrOpened = false;
 
     return Result::SUCCESS;
 }
@@ -610,6 +607,10 @@ bool Demux::detachRecordFilter(int filterId) {
 
 sp<AM_DMX_Device> Demux::getAmDmxDevice(void) {
     return AmDmxDevice;
+}
+
+sp<AmDvr> Demux::getAmDvrDevice() {
+    return mAmDvrDevice;
 }
 
 void Demux::attachDescrambler(uint32_t descramblerId,

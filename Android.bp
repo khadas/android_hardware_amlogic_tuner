@@ -26,6 +26,7 @@ cc_defaults {
         "MultiHwDemux/AmDmx.cpp",
         "MultiHwDemux/AmLinuxDvb.cpp",
         "mediasync/MediaSyncWrap.cpp",
+        "dvr/AmDvr.cpp",
         "Filter.cpp",
         "Frontend.cpp",
         "Descrambler.cpp",
@@ -65,6 +66,7 @@ cc_defaults {
     local_include_dirs: [
         "MultiHwDemux",
         "mediasync",
+        "dvr",
         "utils",
     ],
 

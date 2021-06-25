@@ -24,8 +24,7 @@
 
 AM_DMX_Device::AM_DMX_Device() {
     ALOGD("%s/%d", __FUNCTION__, __LINE__);
-    drv = new AmLinuxDvd;
-    dvrData = new AM_DVR_Data;
+    drv = new AmLinuxDvb;
     open_count = 0;
     for (int fid = 0; fid < DMX_FILTER_COUNT; fid++) {
         filters[fid].used = false;
@@ -36,10 +35,7 @@ AM_DMX_Device::~AM_DMX_Device() {
     if (drv) {
         drv = NULL;
     }
-    if (dvrData != NULL) {
-        delete dvrData;
-        dvrData = NULL;
-    }
+
     ALOGD("%s/%d", __FUNCTION__, __LINE__);
 }
 
@@ -47,30 +43,6 @@ AM_ErrorCode_t AM_DMX_Device::dmx_dvr_open(dmx_input_source_t inputSource) {
     ALOGD("%s/%d", __FUNCTION__, __LINE__);
 
     AM_ErrorCode_t ret = drv->dvr_open(this,inputSource);
-    if (ret == AM_SUCCESS) {
-        /*
-        pthread_mutex_init(&dvr_lock, NULL);
-        pthread_cond_init(&dvr_cond, NULL);
-        enable_dvr_thread = true;
-        if (pthread_create(&dvrthread, NULL, dvr_data_thread, this)) {
-            pthread_mutex_destroy(&dvr_lock);
-            pthread_cond_destroy(&dvr_cond);
-            ret = AM_DMX_ERR_CANNOT_CREATE_THREAD;
-        }*/
-    }
-    return ret;
-}
-
-AM_ErrorCode_t AM_DMX_Device::AM_dvr_Close(void) {
-    AM_ErrorCode_t ret = AM_SUCCESS;
-    ALOGD("%s/%d", __FUNCTION__, __LINE__);
-
-    //enable_dvr_thread = false;
-    //pthread_join(dvrthread, NULL);
-    drv->dvr_close();
-    //pthread_mutex_destroy(&dvr_lock);
-    //pthread_cond_destroy(&dvr_cond);
-
     return ret;
 }
 
@@ -678,68 +650,6 @@ AM_ErrorCode_t AM_DMX_Device::AM_DMX_WriteTs(uint8_t* data,int32_t size,uint64_t
     }
     return AM_SUCCESS;
 }
-
-AM_ErrorCode_t AM_DMX_Device::AM_DVR_Read(/*int fhandle,*/ uint8_t* buff, int *size) {
-    /*
-    AM_DMX_Filter *filter;
-    AM_ErrorCode_t ret = AM_SUCCESS;
-
-    ret = dmx_get_used_filter(fhandle, &filter);
-    if (ret != AM_SUCCESS) {
-        return AM_FAILURE;
-    }
-    if (!filter->enable || !filter->used) {
-        ret = AM_FAILURE;
-    } else {
-        ret  = drv->dvr_read(buff, size);
-    }*/
-
-    return drv->dvr_read(buff, size);
-}
-
-AM_ErrorCode_t AM_DMX_Device::AM_DVR_SetCallback(AM_DVR_DataCb cb, void* data) {
-    ALOGD("%s/%d", __FUNCTION__, __LINE__);
-
-    dvrData->cb = cb;
-    dvrData->user_data = data;
-    return AM_SUCCESS;
-}
-
-
-void* AM_DMX_Device::dvr_data_thread(void *arg) {
-    ALOGD("%s/%d start", __FUNCTION__, __LINE__);
-
-    AM_DMX_Device *dev = (AM_DMX_Device*)arg;
-    AM_ErrorCode_t ret;
-    //int cnt;
-    //uint8_t buf[256*1024];
-
-    while (dev && dev->enable_dvr_thread) {
-        if (dev->drv == NULL) {
-            ALOGW("%s dev->drv is NULL!", __FUNCTION__);
-            break;
-        }
-        ret = dev->drv->dvr_poll(1000);
-        if (ret == AM_SUCCESS ) {
-            if (dev && dev->dvrData && dev->dvrData->cb) {
-                dev->dvrData->cb(dev->dvrData->user_data);
-            }
-        /*
-            ret = dev->drv->dvr_read(buf, &cnt);
-            if (cnt > sizeof(buf))
-            {
-                ALOGE("return size:0x%0x bigger than 0x%0x input buf\n",cnt, sizeof(buf));
-                break;
-            }
-            ALOGE("read from DVR0 return %d bytes\n", cnt);
-        }*/
-
-        }
-
-    }
-    return NULL;
-}
-
 
  #if 0
 AM_ErrorCode_t AM_DMX_Device::AM_DMX_SetSource(AM_DMX_Source_t src)

@@ -38,17 +38,17 @@
 #include <dmx.h>
 #include <TSPHandler.h>
 
-AmLinuxDvd::AmLinuxDvd() {
+AmLinuxDvb::AmLinuxDvb() {
     ALOGI("%s/%d", __FUNCTION__, __LINE__);
     mDvrFd = -1;
     pollFailCount = 0;
 }
 
-AmLinuxDvd::~AmLinuxDvd() {
+AmLinuxDvb::~AmLinuxDvb() {
     ALOGI("%s/%d", __FUNCTION__, __LINE__);
 }
 
-AM_ErrorCode_t AmLinuxDvd::dvb_open(AM_DMX_Device *dev) {
+AM_ErrorCode_t AmLinuxDvb::dvb_open(AM_DMX_Device *dev) {
     DVBDmx_t *dmx;
     int i;
     ALOGI("%s/%d", __FUNCTION__, __LINE__);
@@ -66,7 +66,7 @@ AM_ErrorCode_t AmLinuxDvd::dvb_open(AM_DMX_Device *dev) {
     return AM_SUCCESS;
 }
 
-AM_ErrorCode_t AmLinuxDvd::dvb_close(AM_DMX_Device *dev) {
+AM_ErrorCode_t AmLinuxDvb::dvb_close(AM_DMX_Device *dev) {
     ALOGI("%s/%d", __FUNCTION__, __LINE__);
 
     DVBDmx_t *dmx = (DVBDmx_t*)dev->drv_data;
@@ -76,7 +76,7 @@ AM_ErrorCode_t AmLinuxDvd::dvb_close(AM_DMX_Device *dev) {
     return AM_SUCCESS;
 }
 
-AM_ErrorCode_t AmLinuxDvd::dvb_alloc_filter(AM_DMX_Device *dev, AM_DMX_Filter *filter) {
+AM_ErrorCode_t AmLinuxDvb::dvb_alloc_filter(AM_DMX_Device *dev, AM_DMX_Filter *filter) {
     DVBDmx_t *dmx = (DVBDmx_t*)dev->drv_data;
     int fd = -1;
     ALOGI("%s/%d", __FUNCTION__, __LINE__);
@@ -93,7 +93,7 @@ AM_ErrorCode_t AmLinuxDvd::dvb_alloc_filter(AM_DMX_Device *dev, AM_DMX_Filter *f
     return AM_SUCCESS;
 }
 
-AM_ErrorCode_t AmLinuxDvd::dvb_free_filter(AM_DMX_Device *dev, AM_DMX_Filter *filter) {
+AM_ErrorCode_t AmLinuxDvb::dvb_free_filter(AM_DMX_Device *dev, AM_DMX_Filter *filter) {
     ALOGI("%s/%d", __FUNCTION__, __LINE__);
 
     DVBDmx_t *dmx = (DVBDmx_t*)dev->drv_data;
@@ -103,7 +103,7 @@ AM_ErrorCode_t AmLinuxDvd::dvb_free_filter(AM_DMX_Device *dev, AM_DMX_Filter *fi
     return AM_SUCCESS;
 }
 
-AM_ErrorCode_t AmLinuxDvd::dvb_get_stc(AM_DMX_Device *dev, AM_DMX_Filter *filter) {
+AM_ErrorCode_t AmLinuxDvb::dvb_get_stc(AM_DMX_Device *dev, AM_DMX_Filter *filter) {
     ALOGI("%s/%d", __FUNCTION__, __LINE__);
 
     UNUSED(dev);
@@ -124,7 +124,7 @@ AM_ErrorCode_t AmLinuxDvd::dvb_get_stc(AM_DMX_Device *dev, AM_DMX_Filter *filter
     return AM_SUCCESS;
 }
 
-AM_ErrorCode_t AmLinuxDvd::dvb_set_sec_filter(AM_DMX_Device *dev, AM_DMX_Filter *filter, const struct dmx_sct_filter_params *params) {
+AM_ErrorCode_t AmLinuxDvb::dvb_set_sec_filter(AM_DMX_Device *dev, AM_DMX_Filter *filter, const struct dmx_sct_filter_params *params) {
     ALOGI("%s/%d", __FUNCTION__, __LINE__);
 
     UNUSED(dev);
@@ -147,7 +147,7 @@ AM_ErrorCode_t AmLinuxDvd::dvb_set_sec_filter(AM_DMX_Device *dev, AM_DMX_Filter 
     return AM_SUCCESS;
 }
 
-AM_ErrorCode_t AmLinuxDvd::dvb_set_pes_filter(AM_DMX_Device *dev, AM_DMX_Filter *filter, const struct dmx_pes_filter_params *params) {
+AM_ErrorCode_t AmLinuxDvb::dvb_set_pes_filter(AM_DMX_Device *dev, AM_DMX_Filter *filter, const struct dmx_pes_filter_params *params) {
     ALOGI("%s/%d", __FUNCTION__, __LINE__);
 
     UNUSED(dev);
@@ -164,7 +164,7 @@ AM_ErrorCode_t AmLinuxDvd::dvb_set_pes_filter(AM_DMX_Device *dev, AM_DMX_Filter 
     return AM_SUCCESS;
 }
 
-AM_ErrorCode_t AmLinuxDvd::dvb_enable_filter(AM_DMX_Device *dev, AM_DMX_Filter *filter, bool enable) {
+AM_ErrorCode_t AmLinuxDvb::dvb_enable_filter(AM_DMX_Device *dev, AM_DMX_Filter *filter, bool enable) {
     ALOGI("%s/%d", __FUNCTION__, __LINE__);
 
     UNUSED(dev);
@@ -184,7 +184,7 @@ AM_ErrorCode_t AmLinuxDvd::dvb_enable_filter(AM_DMX_Device *dev, AM_DMX_Filter *
     return AM_SUCCESS;
 }
 
-AM_ErrorCode_t AmLinuxDvd::dvb_get_mem_info(AM_DMX_Filter *filter, dmx_mem_info* mDmxMenInfo) {
+AM_ErrorCode_t AmLinuxDvb::dvb_get_mem_info(AM_DMX_Filter *filter, dmx_mem_info* mDmxMenInfo) {
     int fd = (long)filter->drv_data;
     int ret;
     ALOGV("%s/%d", __FUNCTION__, __LINE__);
@@ -198,7 +198,7 @@ AM_ErrorCode_t AmLinuxDvd::dvb_get_mem_info(AM_DMX_Filter *filter, dmx_mem_info*
     return AM_SUCCESS;
 }
 
-AM_ErrorCode_t AmLinuxDvd::dvb_set_buf_size(AM_DMX_Device *dev, AM_DMX_Filter *filter, int size) {
+AM_ErrorCode_t AmLinuxDvb::dvb_set_buf_size(AM_DMX_Device *dev, AM_DMX_Filter *filter, int size) {
     ALOGI("%s/%d", __FUNCTION__, __LINE__);
     UNUSED(dev);
     int fd = (long)filter->drv_data;
@@ -212,7 +212,7 @@ AM_ErrorCode_t AmLinuxDvd::dvb_set_buf_size(AM_DMX_Device *dev, AM_DMX_Filter *f
     return AM_SUCCESS;
 }
 
-AM_ErrorCode_t AmLinuxDvd::dvb_poll(AM_DMX_Device *dev, AM_DMX_FilterMask_t *mask, int timeout) {
+AM_ErrorCode_t AmLinuxDvb::dvb_poll(AM_DMX_Device *dev, AM_DMX_FilterMask_t *mask, int timeout) {
     DVBDmx_t *dmx = (DVBDmx_t*)dev->drv_data;
     struct pollfd fds[DMX_FILTER_COUNT];
     int fids[DMX_FILTER_COUNT];
@@ -252,7 +252,7 @@ AM_ErrorCode_t AmLinuxDvd::dvb_poll(AM_DMX_Device *dev, AM_DMX_FilterMask_t *mas
     return AM_SUCCESS;
 }
 
-AM_ErrorCode_t AmLinuxDvd::dvb_read(AM_DMX_Device *dev, AM_DMX_Filter *filter, uint8_t *buf, int *size,bool pollflag) {
+AM_ErrorCode_t AmLinuxDvb::dvb_read(AM_DMX_Device *dev, AM_DMX_Filter *filter, uint8_t *buf, int *size,bool pollflag) {
     UNUSED(dev);
 
     int fd = (long)filter->drv_data;
@@ -288,7 +288,7 @@ AM_ErrorCode_t AmLinuxDvd::dvb_read(AM_DMX_Device *dev, AM_DMX_Filter *filter, u
     return AM_SUCCESS;
 }
 
-AM_ErrorCode_t AmLinuxDvd::dvr_open(AM_DMX_Device *dev, dmx_input_source_t inputSource) {
+AM_ErrorCode_t AmLinuxDvb::dvr_open(AM_DMX_Device *dev, dmx_input_source_t inputSource) {
     int ret = 0;
     char name[32];
     ALOGI("%s/%d", __FUNCTION__, __LINE__);
@@ -316,7 +316,7 @@ AM_ErrorCode_t AmLinuxDvd::dvr_open(AM_DMX_Device *dev, dmx_input_source_t input
     return AM_SUCCESS;
 }
 
-int AmLinuxDvd::dvr_data_write(uint8_t *buf, int size,uint64_t timeout) {
+int AmLinuxDvb::dvr_data_write(uint8_t *buf, int size,uint64_t timeout) {
     int ret;
     int left = size;
     uint8_t *p = buf;
@@ -349,7 +349,7 @@ int AmLinuxDvd::dvr_data_write(uint8_t *buf, int size,uint64_t timeout) {
     return (size - left);
 }
 
-AM_ErrorCode_t AmLinuxDvd::dvr_close(void) {
+AM_ErrorCode_t AmLinuxDvb::dvr_close(void) {
     ALOGI("%s/%d", __FUNCTION__, __LINE__);
 
     if (mDvrFd > 0) {
@@ -358,48 +358,8 @@ AM_ErrorCode_t AmLinuxDvd::dvr_close(void) {
     return AM_SUCCESS;
 }
 
-AM_ErrorCode_t AmLinuxDvd::dvr_poll(int timeout)
-{   int fd = mDvrFd;
-    struct pollfd fds;
-    int ret;
-
-    fds.events = POLLIN|POLLERR;
-    fds.fd     = fd;
-
-    ret = poll(&fds, 1, timeout);
-    if (ret <= 0)
-    {
-        ALOGW("dvr_poll timeout! fd:%d ret:%d", fd, ret);
-        return AM_DMX_ERR_TIMEOUT;
-    }
-
-    return AM_SUCCESS;
-}
-
-AM_ErrorCode_t  AmLinuxDvd::dvr_read(uint8_t *buf, int *size)
-{
-    int fd = (long)mDvrFd;
-    int len = *size;
-    int ret;
-
-    if (fd == -1)
-        return AM_DMX_ERR_NOT_ALLOCATED;
-
-    ret = read(fd, buf, len);
-    if (ret <= 0)
-    {
-        if (errno == ETIMEDOUT)
-            return AM_DMX_ERR_TIMEOUT;
-        ALOGE("read dvr failed (%s) %d", strerror(errno), errno);
-        return AM_DMX_ERR_SYS;
-    }
-
-    *size = ret;
-    return AM_SUCCESS;
-}
-
 #if 0
-AM_ErrorCode_t AmLinuxDvd::dvb_set_source(AM_DMX_Device *dev, AM_DMX_Source_t src) {
+AM_ErrorCode_t AmLinuxDvb::dvb_set_source(AM_DMX_Device *dev, AM_DMX_Source_t src) {
     char buf[32];
     char *cmd;
 

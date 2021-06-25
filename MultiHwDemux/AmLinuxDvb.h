@@ -9,8 +9,8 @@
 
 
 
-#ifndef AMLINUX_DVD_H
-#define AMLINUX_DVD_H
+#ifndef AMLINUX_DVB_H
+#define AMLINUX_DVB_H
 
 #include <AmDmx.h>
 
@@ -26,11 +26,11 @@ typedef struct {
     int fd[DMX_FILTER_COUNT];
 } DVBDmx_t;
 
-class AmLinuxDvd : public RefBase {
+class AmLinuxDvb : public RefBase {
 
 public:
-    AmLinuxDvd();
-    ~AmLinuxDvd();
+    AmLinuxDvb();
+    ~AmLinuxDvb();
     AM_ErrorCode_t dvb_open(AM_DMX_Device *dev);
     AM_ErrorCode_t dvb_close(AM_DMX_Device *dev);
     AM_ErrorCode_t dvb_alloc_filter(AM_DMX_Device *dev, AM_DMX_Filter *filter);
@@ -47,8 +47,6 @@ public:
     AM_ErrorCode_t dvr_open(AM_DMX_Device *dev,dmx_input_source_t inputSource);
     int dvr_data_write(uint8_t *buf, int size,uint64_t timeout);
     AM_ErrorCode_t dvr_close(void);
-    AM_ErrorCode_t dvr_poll(int timeout);
-    AM_ErrorCode_t dvr_read(uint8_t *buf, int *size);
 private:
     int mDvrFd;
     int pollFailCount;
