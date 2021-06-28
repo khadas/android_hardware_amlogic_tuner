@@ -171,7 +171,7 @@ Tuner::Tuner() {
                     if (!arrayFronts[i]["exclusiveGroupId"].isNull()) {
                         exclusiveId = arrayFronts[i]["exclusiveId"].asUInt();
                     } else {
-                        exclusiveId = (uint32_t)id;
+                        exclusiveId = (uint32_t)(hwCaps.id);
                     }
                     info = {
                         .type = static_cast<FrontendType>(frontType),
@@ -184,7 +184,8 @@ Tuner::Tuner() {
                         .statusCaps = statusCaps,
                         .frontendCaps = caps,
                     };
-                    ALOGD("Add frontend type(%d), id(%d), hwId(%d)", frontType, id, hwCaps.id);
+                    ALOGD("Add frontend type(%d), id(%d), hwId(%d),exclusiveGroupId(%u)",
+                        frontType, id, hwCaps.id, info.exclusiveGroupId);
                     FrontendInfos_t fes = {id, hwCaps.id, nullptr, info};
                     mFrontendInfos.push_back(fes);
                     mFrontendSize ++;
