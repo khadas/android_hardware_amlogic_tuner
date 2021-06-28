@@ -91,23 +91,25 @@ int FrontendAnalogDevice::getFrontendSettings(FrontendSettings *settings, void* 
         settings->analog().sifStandard = FrontendAnalogSifStandard::AUTO;
     }
 
-    p_fe_params->u.analog.std = tmpTVidStd;
-    p_fe_params->u.analog.audmode = tmpAudStd;
-    p_fe_params->u.analog.afc_range = 0;
-    p_fe_params->u.analog.soundsys = 0xFF;
+    //p_fe_params->u.analog.std = tmpTVidStd;
+    //p_fe_params->u.analog.audmode = tmpAudStd;
+    //p_fe_params->u.analog.afc_range = 0;
+    //p_fe_params->u.analog.soundsys = 0xFF;
     return 0;
 }
 
 int FrontendAnalogDevice::getFeDeliverySystem(FrontendType type) {
+    #if 0
     enum fe_delivery_system fe_system;
 
     if (type != FrontendType::ANALOG) {
         fe_system = SYS_UNDEFINED;
     } else {
-        fe_system = SYS_ANALOG;
+        fe_system = SYS_UNDEFINED;
     }
+    #endif
 
-    return (int)(fe_system);
+    return SYS_UNDEFINED;
 }
 
 }  // namespace implementation

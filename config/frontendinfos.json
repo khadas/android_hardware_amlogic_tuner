@@ -24,7 +24,7 @@
         //         0x400-l, 0x800-m, 0x1000-m_btsc, 0x2000-m_a2, 0x4000-m_eiaj,
         //         0x8000-i_nicam, 0x10000-l_nicam, 0x20000-l_prime
 
-        {"hwid":0, "type":1, "analogTypeCap":255, "sifCap":114687},
+        //{"hwid":0, "type":1, "analogTypeCap":255, "sifCap":114687},
 
         // dvbc
         // modulationCap: 0-undefined, 0x1-auto, 0x2-16qam, 0x4-32qam, 0x8-64qam,
