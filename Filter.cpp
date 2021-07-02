@@ -582,6 +582,7 @@ Result Filter::startSectionFilterHandler() {
     }
     if (!writeSectionsAndCreateEvent(mFilterOutput)) {
         ALOGE("[Filter] filter %d fails to write into FMQ. Ending thread", mFilterId);
+        mFilterOutput.clear();
         return Result::UNKNOWN_ERROR;
     }
     fillDataToDecoder();
@@ -723,6 +724,7 @@ Result Filter::startMediaFilterHandler() {
     fillDataToDecoder();
 
     // Clear and log
+    releaseIonBuffer(avBuffer, mFilterOutput.size());
     mFilterOutput.clear();
     mAvBufferCopyCount = 0;
     ::close(av_fd);
@@ -901,13 +903,13 @@ void Filter::detachFilterFromRecord() {
 
 int Filter::createAvIonFd(int size) {
     // Create an ion fd and allocate an av fd mapped to a buffer to it.
-    int ion_fd = ion_open();
-    if (ion_fd == -1) {
+    mIonFd = ion_open();
+    if (mIonFd == -1) {
         ALOGE("[Filter] Failed to open ion fd errno:%d!", errno);
         return -1;
     }
     int av_fd = -1;
-    ion_alloc_fd(dup(ion_fd), size, 0 /*align*/, ION_HEAP_SYSTEM_MASK, 0 /*flags*/, &av_fd);
+    ion_alloc_fd(dup(mIonFd), size, 0 /*align*/, ION_HEAP_SYSTEM_MASK, 0 /*flags*/, &av_fd);
     if (av_fd == -1) {
         ALOGE("[Filter] Failed to create av fd errno:%d!", errno);
         return -1;
@@ -928,16 +930,34 @@ uint8_t* Filter::getIonBuffer(int fd, int size) {
 }
 
 native_handle_t* Filter::createNativeHandle(int fd) {
-    // Create a native handle to pass the av fd via the callback event.
-    native_handle_t* nativeHandle = native_handle_create(/*numFd*/ 1, 0);
+    native_handle_t* nativeHandle;
+    if (fd < 0) {
+        nativeHandle = native_handle_create(/*numFd*/ 0, 0);
+    } else {
+        // Create a native handle to pass the av fd via the callback event.
+        nativeHandle = native_handle_create(/*numFd*/ 1, 0);
+    }
     if (nativeHandle == NULL) {
-        ALOGE("[Filter] Failed to create native_handle errno:%d!", errno);
+        ALOGE("[Filter] Failed to create native_handle %d", errno);
         return NULL;
     }
-    nativeHandle->data[0] = dup(fd);
+    if (nativeHandle->numFds > 0) {
+        nativeHandle->data[0] = dup(fd);
+    }
     ALOGD("%s/%d mFilterId:%d fd:%d nativeHandle fd:%d", __FUNCTION__, __LINE__, mFilterId, fd, nativeHandle->data[0]);
 
     return nativeHandle;
+}
+
+void Filter::releaseIonBuffer(uint8_t* avBuf, int size) {
+    if (avBuf != NULL) {
+        munmap(avBuf, size);
+    }
+
+    if (mIonFd >= 0) {
+        ion_close(mIonFd);
+        mIonFd = -1;
+    }
 }
 }  // namespace implementation
 }  // namespace V1_0

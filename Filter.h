@@ -176,6 +176,7 @@ class Filter : public IFilter {
     int createAvIonFd(int size);
     uint8_t* getIonBuffer(int fd, int size);
     native_handle_t* createNativeHandle(int fd);
+    void releaseIonBuffer(uint8_t* avBuf, int size);
 
     /**
      * Lock to protect writes to the FMQs
@@ -203,6 +204,7 @@ class Filter : public IFilter {
     std::map<uint64_t, int> mDataId2Avfd;
     uint64_t mLastUsedDataId = 1;
     int mAvBufferCopyCount = 0;
+    int mIonFd;
 };
 
 }  // namespace implementation
