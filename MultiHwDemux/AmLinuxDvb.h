@@ -40,6 +40,7 @@ public:
     AM_ErrorCode_t dvb_set_pes_filter(AM_DMX_Device *dev, AM_DMX_Filter *filter, const struct dmx_pes_filter_params *params);
     AM_ErrorCode_t dvb_enable_filter(AM_DMX_Device *dev, AM_DMX_Filter *filter, bool enable);
     AM_ErrorCode_t dvb_get_mem_info(AM_DMX_Filter *filter, dmx_mem_info* mDmxMenInfo);
+    AM_ErrorCode_t dvb_get_filter_mem_info(AM_DMX_Device *dev, dmx_filter_mem_info* mDmxFilterMemInfo);
     AM_ErrorCode_t dvb_set_buf_size(AM_DMX_Device *dev, AM_DMX_Filter *filter, int size);
     AM_ErrorCode_t dvb_poll(AM_DMX_Device *dev, AM_DMX_FilterMask_t *mask, int timeout);
     AM_ErrorCode_t dvb_read(AM_DMX_Device *dev, AM_DMX_Filter *filter, uint8_t *buf, int *size,bool pollflag = true);
@@ -50,6 +51,7 @@ public:
 private:
     int mDvrFd;
     int pollFailCount;
+    int mFilterMemInfoFd;
 };
 
 #endif

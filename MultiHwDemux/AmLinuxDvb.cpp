@@ -42,9 +42,14 @@ AmLinuxDvb::AmLinuxDvb() {
     ALOGI("%s/%d", __FUNCTION__, __LINE__);
     mDvrFd = -1;
     pollFailCount = 0;
+    mFilterMemInfoFd = -1;
 }
 
 AmLinuxDvb::~AmLinuxDvb() {
+    if (mFilterMemInfoFd != -1) {
+        close(mFilterMemInfoFd);
+    }
+
     ALOGI("%s/%d", __FUNCTION__, __LINE__);
 }
 
@@ -195,6 +200,29 @@ AM_ErrorCode_t AmLinuxDvb::dvb_get_mem_info(AM_DMX_Filter *filter, dmx_mem_info*
         return AM_DMX_ERR_SYS;
     }
 
+    return AM_SUCCESS;
+}
+
+AM_ErrorCode_t AmLinuxDvb::dvb_get_filter_mem_info(AM_DMX_Device *dev, dmx_filter_mem_info* mDmxFilterMemInfo) {
+
+    //int fd = 0;//(long)filter->drv_data;
+    int ret;
+    if (mFilterMemInfoFd == -1) {
+        char dev_name[32];
+        snprintf(dev_name, 32, "/dev/dvb0.demux%d", dev->dev_no);
+        mFilterMemInfoFd = open(dev_name, O_RDWR);
+        if (mFilterMemInfoFd == -1) {
+            ALOGE("cannot open \"%s\" (%s)", dev_name, strerror(errno));
+            return AM_DMX_ERR_CANNOT_OPEN_DEV;
+        }
+    }
+
+    memset(mDmxFilterMemInfo, 0, sizeof(struct dmx_filter_mem_info));
+    ret = ioctl(mFilterMemInfoFd, DMX_GET_FILTER_MEM_INFO, mDmxFilterMemInfo);
+    if (ret == -1) {
+        ALOGE("get filter mem info failed (%s)", strerror(errno));
+        return AM_DMX_ERR_SYS;
+    }
     return AM_SUCCESS;
 }
 

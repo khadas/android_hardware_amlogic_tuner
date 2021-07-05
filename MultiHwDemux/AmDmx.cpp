@@ -626,6 +626,13 @@ AM_ErrorCode_t AM_DMX_Device::AM_DMX_GetMenInfo(int fhandle, dmx_mem_info* mDmxM
     return ret;
 }
 
+AM_ErrorCode_t AM_DMX_Device::AM_DMX_GetFilterMenInfo(dmx_filter_mem_info* mDmxFilterMemInfo) {
+    AM_ErrorCode_t ret = AM_SUCCESS;
+    pthread_mutex_lock(&lock);
+    ret = drv->dvb_get_filter_mem_info(this,mDmxFilterMemInfo);
+    pthread_mutex_unlock(&lock);
+    return ret;
+}
 
 AM_ErrorCode_t AM_DMX_Device::AM_DMX_Sync()
 {

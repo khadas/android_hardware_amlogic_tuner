@@ -174,6 +174,17 @@ struct dmx_mem_info {
     __u32 dvb_core_total_size;
     __u32 dvb_core_free_size;
     __u32 wp_offset;
+	__u64 newest_pts;
+};
+struct filter_mem_info {
+	__u32 type;
+	__u32 pid;
+	struct dmx_mem_info	filter_info;
+};
+
+struct dmx_filter_mem_info {
+	__u32 filter_num;
+	struct filter_mem_info info[40];
 };
 #endif
 
@@ -242,5 +253,6 @@ struct dmx_stc {
 #define DMX_SET_INPUT           _IO('o', 80)
 #define DMX_GET_MEM_INFO        _IOR('o', 81, struct dmx_mem_info)
 #endif
+#define DMX_GET_FILTER_MEM_INFO _IOR('o', 84, struct dmx_filter_mem_info)
 
 #endif /* _UAPI_DVBDMX_H_ */
