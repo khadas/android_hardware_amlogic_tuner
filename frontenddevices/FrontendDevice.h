@@ -76,6 +76,7 @@ public:
         STATE_SCAN_START,
         STATE_TUNE_IDLE,
         STATE_STOP,
+        STATE_REQUEST_STOP,
         STATE_FINISH,
     }e_event_stat_t;
 
@@ -107,6 +108,7 @@ private:
     uint32_t getClockMilliSeconds(void);
     int getThreadState(void);
     void updateThreadState(int state);
+    void requestTuneStop(void);
 
     int setFeSystem();
     int internalTune(const FrontendSettings & settings);

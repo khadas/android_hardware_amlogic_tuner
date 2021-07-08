@@ -81,7 +81,7 @@ void FrontendDevice::release() {
     clearTuner();
     if (mDev.mHw != nullptr)
     {
-        std::lock_guard<std::mutex> lock(mThreadStatLock);
+        std::lock_guard<std::mutex> lock(mHwDevLock);
         mDev.mHw->release(mDev.devFd, this);
         mDev.devFd = -1;
     }
@@ -95,7 +95,7 @@ void FrontendDevice::stop() {
     clearTuner();
     if (mDev.mHw != nullptr)
     {
-        std::lock_guard<std::mutex> lock(mThreadStatLock);
+        std::lock_guard<std::mutex> lock(mHwDevLock);
         clearTuner();
         mDev.mHw->release(mDev.devFd, this);
         mDev.devFd = -1;
@@ -151,6 +151,7 @@ bool FrontendDevice::checkOpen(bool autoOpen) {
 }
 
 int FrontendDevice::tune(const FrontendSettings & settings) {
+    requestTuneStop();
     updateThreadState(FrontendDevice::STATE_TUNE_START);
     return internalTune(settings);
 }
@@ -379,25 +380,28 @@ int FrontendDevice::blindTune(const FrontendSettings & settings) {
         }
         mDev.blindFreq = fe_info.frequency_min;
     }
+    requestTuneStop();
     updateThreadState(FrontendDevice::STATE_SCAN_START);
     return internalTune(settings);
 }
 
 int FrontendDevice::scan(const FrontendSettings & settings, FrontendScanType type) {
+    int ret = 0;
 
     if (!checkOpen(true)) return UNAVAILABLE;
 
     if (type == FrontendScanType::SCAN_AUTO) {
         mDev.blindFreq = 0;
+        requestTuneStop();
         updateThreadState(FrontendDevice::STATE_SCAN_START);
-        return internalTune(settings);
+        ret = internalTune(settings);
     } else if (type == FrontendScanType::SCAN_BLIND) {
-        return blindTune(settings);
+        ret = blindTune(settings);
     } else {
         mDev.blindFreq = 0;
-        return INVALID_ARGUMENT;
+        ret = INVALID_ARGUMENT;
     }
-    return 0;
+    return ret;
 }
 
 void FrontendDevice::clearTuner() {
@@ -445,8 +449,8 @@ bool FrontendDevice::threadLoop() {
        || state == FrontendDevice::STATE_SCAN_START
        || state == FrontendDevice::STATE_TUNE_IDLE) {
         stop = false;
-        state = getThreadState();
-        if (state == FrontendDevice::STATE_STOP) {
+        int newState = getThreadState();
+        if (newState == FrontendDevice::STATE_STOP || newState == FrontendDevice::STATE_REQUEST_STOP) {
             stop = true;
         }
         if (state == FrontendDevice::STATE_TUNE_START
@@ -468,13 +472,13 @@ bool FrontendDevice::threadLoop() {
                         }
                     }
                 }
-                state = getThreadState();
-                if (state == FrontendDevice::STATE_STOP) {
+                newState = getThreadState();
+                if (newState == FrontendDevice::STATE_STOP || newState == FrontendDevice::STATE_REQUEST_STOP) {
                     stop = true;
                 }
             }
         }
-        if (fe_event.status != 0) {
+        if (fe_event.status != 0 && !stop) {
             bool locked = ((fe_event.status & FE_HAS_LOCK) !=0);
             ALOGD("%s: get fe event: 0x%02x, locked=%d, dev_locked=%d", __FUNCTION__, fe_event.status, locked, mDev.islocked);
             if (state == STATE_SCAN_START) {
@@ -503,9 +507,12 @@ bool FrontendDevice::threadLoop() {
                 }
             }
         }
+        if (newState == FrontendDevice::STATE_REQUEST_STOP) {
+            updateThreadState(FrontendDevice::STATE_STOP);
+        }
     } else if (state == FrontendDevice::STATE_STOP
        || state == FrontendDevice::STATE_INITIAL_IDLE) {
-        ALOGD("%s: thread wait in stop state.", __FUNCTION__);
+        ALOGD("%s: fe thread wait in stop state.", __FUNCTION__);
         sem_wait(&threadSemaphore);
     } else if (state == FrontendDevice::STATE_FINISH) {
         usleep(1000*20);//wait to exit thread
@@ -530,6 +537,25 @@ void FrontendDevice::updateThreadState(int state) {
     mThreadState = (e_event_stat_t)state;
 }
 
+void FrontendDevice::requestTuneStop(void) {
+    bool ready = false;
+
+    int state = getThreadState();
+    if (state == FrontendDevice::STATE_SCAN_START
+        || state == FrontendDevice::STATE_TUNE_START
+        || state == FrontendDevice::STATE_TUNE_IDLE) {
+        updateThreadState(FrontendDevice::STATE_REQUEST_STOP);
+    }
+
+    while (ready == false) {
+        int state = getThreadState();
+        if (state == FrontendDevice::STATE_STOP
+            || state == FrontendDevice::STATE_INITIAL_IDLE) {
+            ready = true;
+        }
+    }
+    ALOGD("%s: stop from tunning.", __FUNCTION__);
+}
 
 }  // namespace implementation
 }  // namespace V1_0
