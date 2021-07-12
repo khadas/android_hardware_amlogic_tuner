@@ -180,8 +180,8 @@ class Demux : public IDemux {
     /**
      * Local reference to the opened DVR object.
      */
-    sp<Dvr> mDvrPlayback;
-    sp<Dvr> mDvrRecord;
+    sp<Dvr> mDvrPlayback = nullptr;
+    sp<Dvr> mDvrRecord = nullptr;;
 
     // Thread handlers
     pthread_t mFrontendInputThread;

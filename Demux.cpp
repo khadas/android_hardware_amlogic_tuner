@@ -368,6 +368,7 @@ Return<Result> Demux::close() {
     mPcrFilterIds.clear();
     mFilters.clear();
     mLastUsedFilterId = -1;
+    mDvrPlayback = nullptr;
 
     return Result::SUCCESS;
 }
@@ -540,6 +541,10 @@ void Demux::frontendInputThreadLoop() {
     std::lock_guard<std::mutex> lock(mFrontendInputThreadLock);
     mFrontendInputThreadRunning = true;
     ALOGI("%s/%d readPlaybackFMQ and startFilterDispatcher", __FUNCTION__, __LINE__);
+    if (mDvrPlayback == nullptr) {
+        ALOGE("DvrPlayback didn't open, no need to start frontend input thread");
+        return;
+    }
 
     while (mFrontendInputThreadRunning) {
         uint32_t efState = 0;

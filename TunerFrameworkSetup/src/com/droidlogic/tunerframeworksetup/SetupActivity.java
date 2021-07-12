@@ -1167,8 +1167,6 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                                        200/*PRIORITY_HINT_USE_CASE_TYPE_SCAN*/);
                     Log.d(TAG, "mTuner created:" + mTuner);
                     mTuner.setOnTuneEventListener(mExecutor, this);
-                    mDvrPlayback = mTuner.openDvrPlayback(mDvrMQSize_MB * 1024 * 1024, mExecutor, this);
-                    mDvrPlayback.configure(getDvrSettings());
                 }
             }
             mTuner.scan(feSettings, Tuner.SCAN_TYPE_AUTO, mExecutor, this);
@@ -1219,7 +1217,10 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
 
         Log.d(TAG, "MediaCodecPlayer start");
         mMediaCodecPlayer.startPlayer();
-
+        if (mDvrPlayback == null) {
+            mDvrPlayback = mTuner.openDvrPlayback(mDvrMQSize_MB * 1024 * 1024, mExecutor, this);
+            mDvrPlayback.configure(getDvrSettings());
+        }
         if (bTuner) {
             Log.d(TAG, "Frequency:" + mFrequency.getText().toString() + "MHz");
             int freqMhz = 0;
