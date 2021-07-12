@@ -76,7 +76,6 @@ public:
         STATE_SCAN_START,
         STATE_TUNE_IDLE,
         STATE_STOP,
-        STATE_REQUEST_STOP,
         STATE_FINISH,
     }e_event_stat_t;
 
@@ -100,6 +99,7 @@ private:
     e_event_stat_t   mThreadState;
     fe_dev_t         mDev;
     bool             unsupportSystem;
+    bool             mRequestTunningStop;
 
     virtual bool     threadLoop(void);
     virtual status_t readyToRun(void);

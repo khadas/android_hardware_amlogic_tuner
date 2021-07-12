@@ -28,6 +28,10 @@
 #include "Lnb.h"
 #include "HwFeState.h"
 
+#define FE_POLL_TIMEOUT_MS 50
+#define FE_STATE_TIMEOUT_MS 3000
+#define FE_SIGNAL_CHECK_INTERVAL_MS 200
+
 namespace android {
 namespace hardware {
 namespace tv {
@@ -450,7 +454,7 @@ bool FrontendDevice::threadLoop() {
        || state == FrontendDevice::STATE_TUNE_IDLE) {
         stop = false;
         int newState = getThreadState();
-        if (newState == FrontendDevice::STATE_STOP || newState == FrontendDevice::STATE_REQUEST_STOP) {
+        if (mRequestTunningStop || newState == FrontendDevice::STATE_STOP) {
             stop = true;
         }
         if (state == FrontendDevice::STATE_TUNE_START
@@ -460,22 +464,28 @@ bool FrontendDevice::threadLoop() {
         {
             std::lock_guard<std::mutex> lock(mHwDevLock);
             pfd.fd = mDev.devFd;
-            pfd.events = POLLIN;
-            pfd.revents = 0;
-            for (start_time = getClockMilliSeconds();
-                 !stop && ((getClockMilliSeconds() - start_time) < 3000);) {
-                if (poll(&pfd, 1, 50) == 1) {
-                    if (ioctl(mDev.devFd, FE_GET_EVENT, &fe_event) >= 0) {
-                        if ((fe_event.status & FE_HAS_LOCK) !=0
-                            || (fe_event.status & FE_TIMEDOUT) != 0) {
-                            break;
-                        }
+        }
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+        for (start_time = getClockMilliSeconds();
+             !stop && ((getClockMilliSeconds() - start_time) < FE_STATE_TIMEOUT_MS);) {
+            if (poll(&pfd, 1, FE_POLL_TIMEOUT_MS) == 1) {
+                if (ioctl(mDev.devFd, FE_GET_EVENT, &fe_event) >= 0) {
+                    if ((fe_event.status & FE_HAS_LOCK) !=0
+                        || (fe_event.status & FE_TIMEDOUT) != 0) {
+                        break;
                     }
                 }
-                newState = getThreadState();
-                if (newState == FrontendDevice::STATE_STOP || newState == FrontendDevice::STATE_REQUEST_STOP) {
+            } else {
+                if (state == FrontendDevice::STATE_TUNE_IDLE) {
+                    //scan and tune need check sevaral seconds for signal
+                    //will not stable. and in ilde state, we just poll once
                     stop = true;
                 }
+            }
+            newState = getThreadState();
+            if (mRequestTunningStop || newState == FrontendDevice::STATE_STOP) {
+                stop = true;
             }
         }
         if (fe_event.status != 0 && !stop) {
@@ -507,8 +517,11 @@ bool FrontendDevice::threadLoop() {
                 }
             }
         }
-        if (newState == FrontendDevice::STATE_REQUEST_STOP) {
+        if (mRequestTunningStop) {
             updateThreadState(FrontendDevice::STATE_STOP);
+        }
+        if (getThreadState() == FrontendDevice::STATE_TUNE_IDLE) {
+            usleep(1000*FE_SIGNAL_CHECK_INTERVAL_MS);
         }
     } else if (state == FrontendDevice::STATE_STOP
        || state == FrontendDevice::STATE_INITIAL_IDLE) {
@@ -540,13 +553,7 @@ void FrontendDevice::updateThreadState(int state) {
 void FrontendDevice::requestTuneStop(void) {
     bool ready = false;
 
-    int state = getThreadState();
-    if (state == FrontendDevice::STATE_SCAN_START
-        || state == FrontendDevice::STATE_TUNE_START
-        || state == FrontendDevice::STATE_TUNE_IDLE) {
-        updateThreadState(FrontendDevice::STATE_REQUEST_STOP);
-    }
-
+    mRequestTunningStop = true;
     while (ready == false) {
         int state = getThreadState();
         if (state == FrontendDevice::STATE_STOP
@@ -554,7 +561,7 @@ void FrontendDevice::requestTuneStop(void) {
             ready = true;
         }
     }
-    ALOGD("%s: stop from tunning.", __FUNCTION__);
+    mRequestTunningStop = false;
 }
 
 }  // namespace implementation
