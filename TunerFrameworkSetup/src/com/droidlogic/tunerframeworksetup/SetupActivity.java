@@ -2449,11 +2449,6 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                 int totalReadMBs = 0;
                 int tempMB = 0;
                 boolean mResetDvrPlayback = false;
-                try {
-                     Thread.sleep(500);
-                 } catch (Exception e) {
-                     e.printStackTrace();
-                 }
                  mDvrReadStart.set(true);
                  while (mDvrReadStart.get() && mDvrPlayback != null) {
                     long mReadLen = mDvrPlayback.read(mDvrOnceReadSize);

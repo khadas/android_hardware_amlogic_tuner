@@ -64,15 +64,6 @@ Demux::Demux(uint32_t demuxId, sp<Tuner> tuner) {
 
 Demux::~Demux() {
     ALOGD("~Demux");
-    if (AmDmxDevice != NULL) {
-        AmDmxDevice->AM_DMX_Close();
-        AmDmxDevice = NULL;
-    }
-
-    if (mAmDvrDevice != NULL) {
-        mAmDvrDevice->AM_DVR_Close();
-        mAmDvrDevice = NULL;
-    }
 }
 
 void Demux::postDvrData(void* demux) {
@@ -368,7 +359,21 @@ Return<Result> Demux::close() {
     mPcrFilterIds.clear();
     mFilters.clear();
     mLastUsedFilterId = -1;
+
     mDvrPlayback = nullptr;
+
+    if (mMediaSyncWrap != NULL) {
+        mMediaSyncWrap = NULL;
+    }
+
+    if (AmDmxDevice != NULL) {
+        AmDmxDevice->AM_DMX_Close();
+        AmDmxDevice = NULL;
+    }
+    if (mAmDvrDevice != NULL) {
+        mAmDvrDevice->AM_DVR_Close();
+        mAmDvrDevice = NULL;
+    }
 
     return Result::SUCCESS;
 }
