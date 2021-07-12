@@ -1713,8 +1713,9 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
             Log.d(TAG, "PMT mSectionLength is " + pmtInfo.mSectionLength);
         }
         pmtInfo.mReserved_3 = (data[8] & 0xff) >> 5;
+        int pcrPid = ((data[8] & 0x1f) << 8) | (int)(data[9] & 0xff);
         //PCR_PID ((data[8] << 8) | data[9]) & 0x1FFF
-        pmtInfo.mPcrPid = (data[8] & 0x1f) << 8 | data[9];
+        pmtInfo.mPcrPid = pcrPid;
         Log.d(TAG, "pcrPid:" + pmtInfo.mPcrPid);
 
         pmtInfo.mReserved_4 = (data[10] & 0xff) >> 4;
@@ -2228,7 +2229,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         .setSettings(settings)
         .build();
 
-        mEsCasInfo[esIdx].mEcmSectionFilter[ecmFilterIdx] = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_SECTION, 1024 * 1024 * 2, mExecutor, mEcmFilterCallback);
+        mEsCasInfo[esIdx].mEcmSectionFilter[ecmFilterIdx] = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_SECTION, 1024 * 4, mExecutor, mEcmFilterCallback);
         mEsCasInfo[esIdx].mEcmSectionFilter[ecmFilterIdx].configure(config);
         mEsCasInfo[esIdx].mEcmSectionFilter[ecmFilterIdx].start();
         Log.d(TAG, "Section ecm filter(0x" + Integer.toHexString(pid) + ") start");
@@ -2361,7 +2362,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
 
     private Filter openPcrFilter(int pcrPid) {
         Log.d(TAG, "openPcrFilter pcrPid:0x" + Integer.toHexString(pcrPid));
-        Filter filter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_PCR, 32 * 1024, mExecutor, mfilterCallback);
+        Filter filter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_PCR, 1024 * 1024, mExecutor, mfilterCallback);
         if (filter != null) {
             FilterConfiguration pcrConfig = TsFilterConfiguration
                     .builder()
@@ -2369,7 +2370,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                     .setSettings(null)
                     .build();
             filter.configure(pcrConfig);
-//            filter.start();
+            filter.start();
         }
         return filter;
     }
@@ -2457,7 +2458,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                     long mReadLen = mDvrPlayback.read(mDvrOnceReadSize);
                     try {
                         Thread.sleep(mDuration);
-                        if (mPlayerStart.get() == true && mIsCasPlayback && !mResetDvrPlayback) {
+                        if (mPlayerStart.get() == true && mEnableLocalPlay && !mResetDvrPlayback) {
                             Log.d(TAG, "Reset DvrPlayback");
                             mDvrPlayback.stop();
                             Os.lseek(mTestFileDescriptor, 0, OsConstants.SEEK_SET);
@@ -2520,7 +2521,6 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         mDvrPlayback.flush();
         readDataToPlay();
     }
-
 
     private void stopDvrPlayback() {
         Log.d(TAG, "stopDvrPlayback");

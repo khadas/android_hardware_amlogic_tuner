@@ -254,6 +254,22 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
                 }
                 case DemuxTsFilterType::PCR: {
                     ALOGD("%s subType:PCR", __FUNCTION__);
+                    struct dmx_pes_filter_params pcrParam;
+                    memset(&pcrParam, 0, sizeof(pcrParam));
+                    pcrParam.pid = mTpid;
+                    pcrParam.pes_type = DMX_PES_PCR0;
+                    pcrParam.input = DMX_IN_FRONTEND;
+                    pcrParam.output = DMX_OUT_TAP;
+                    pcrParam.flags = 0;
+                    pcrParam.flags |= DMX_ES_OUTPUT;
+                    if (mDemux->getAmDmxDevice()
+                        ->AM_DMX_SetBufferSize(mFilterId, mBufferSize) != 0 ) {
+                        return Result::UNAVAILABLE;
+                    }
+                    if (mDemux->getAmDmxDevice()
+                        ->AM_DMX_SetPesFilter(mFilterId, &pcrParam) != 0 ) {
+                        return Result::UNAVAILABLE;
+                    }
                     break;
                 }
                 default:
@@ -441,20 +457,20 @@ void Filter::fillDataToDecoder() {
 
     // For the first time of filter output, implementation needs to send the filter
     // Event Callback without waiting for the DATA_CONSUMED to init the process.
-        if (mFilterEvent.events.size() == 0) {
-            ALOGV("[Filter %d] wait for new mFilterEvent", mFilterId);
-            return;
-        }
-        if (mCallback == nullptr) {
-            ALOGW("[Filter] mFilterId:%d does not hava callback. Ending thread", mFilterId);
-            return;
-        }
-        // After successfully write, send a callback and wait for the read to be done
-        mCallback->onFilterEvent(mFilterEvent);
-        freeAvHandle();
-        mFilterEvent.events.resize(0);
-        mFilterStatus = DemuxFilterStatus::DATA_READY;
-        mCallback->onFilterStatus(mFilterStatus);
+    if (mFilterEvent.events.size() == 0) {
+        ALOGV("[Filter %d] wait for new mFilterEvent", mFilterId);
+        return;
+    }
+    if (mCallback == nullptr) {
+        ALOGW("[Filter] mFilterId:%d does not hava callback.", mFilterId);
+        return;
+    }
+    // After successfully write, send a callback and wait for the read to be done
+    mCallback->onFilterEvent(mFilterEvent);
+    freeAvHandle();
+    mFilterEvent.events.resize(0);
+    mFilterStatus = DemuxFilterStatus::DATA_READY;
+    mCallback->onFilterStatus(mFilterStatus);
 }
 
 void Filter::freeAvHandle() {
@@ -576,6 +592,7 @@ Result Filter::startFilterHandler() {
 Result Filter::startSectionFilterHandler() {
     if (DEBUG_FILTER)
         ALOGD("%s/%d mFilterId:%d", __FUNCTION__, __LINE__, mFilterId);
+
     if (mFilterOutput.empty()) {
         ALOGV("%s/%d mFilterOutput is empty!", __FUNCTION__, __LINE__);
         return Result::SUCCESS;

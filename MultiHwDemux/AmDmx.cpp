@@ -420,6 +420,7 @@ AM_ErrorCode_t AM_DMX_Device::AM_DMX_SetSecFilter(int fhandle, const struct dmx_
     }
 
     if (ret == AM_SUCCESS) {
+        filter->flags = params->flags;
         ret = drv->dvb_set_sec_filter(this, filter, params);
         ALOGI("set sec filter %d PID: %d filter: %02x:%02x %02x:%02x %02x:%02x %02x:%02x %02x:%02x %02x:%02x %02x:%02x %02x:%02x",
         fhandle, params->pid,
