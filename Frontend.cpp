@@ -91,7 +91,10 @@ Return<Result> Frontend::tune(const FrontendSettings& settings) {
     }
 
     int ret = mFeDev->tune(settings);
-    mTunerService->frontendStartTune(mId);
+    if (mId != mExistId) {
+        mTunerService->frontendStartTune(mId);
+        mExistId = mId;
+    }
     //mCallback->onEvent(FrontendEventType::LOCKED);
     //mIsLocked = true;
 

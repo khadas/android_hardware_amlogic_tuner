@@ -577,6 +577,7 @@ void Demux::stopFrontendInput() {
     ALOGD("[Demux] stop frontend on demux");
     mKeepFetchingDataFromFrontend = false;
     mFrontendInputThreadRunning = false;
+    pthread_join(mFrontendInputThread, NULL);
     std::lock_guard<std::mutex> lock(mFrontendInputThreadLock);
 }
 

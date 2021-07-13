@@ -84,6 +84,7 @@ class Frontend : public IFrontend {
     sp<Tuner> mTunerService;
     FrontendType mType = FrontendType::UNDEFINED;
     FrontendId mId = 0;
+    FrontendId mExistId = -1;
     bool mIsLocked = false;
     sp<FrontendDevice> mFeDev;
 

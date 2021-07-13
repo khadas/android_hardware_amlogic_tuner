@@ -344,6 +344,13 @@ Return<void> Tuner::openLnbByName(const hidl_string& /*lnbName*/, openLnbByName_
 
 void Tuner::setFrontendAsDemuxSource(uint32_t frontendId, uint32_t demuxId) {
     ALOGV("%s/%d", __FUNCTION__, __LINE__);
+    map<uint32_t, uint32_t>::iterator it = mFrontendToDemux.find(frontendId);
+    uint32_t dmxId;
+    if (it != mFrontendToDemux.end()) {
+        dmxId = it->second;
+        ALOGD("find demuxid = %d in mFrontendToDemux, don't need to startFrontendInputLoop", dmxId);
+        return;
+    }
 
     mFrontendToDemux[frontendId] = demuxId;
     sp<Frontend> frontend = mFrontendInfos[frontendId].mFrontend;
