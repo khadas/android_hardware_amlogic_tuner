@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import android.os.Handler;
+
 public class MediaCodecPlayer {
 
     private final static String TAG = MediaCodecPlayer.class.getSimpleName();
@@ -60,6 +62,8 @@ public class MediaCodecPlayer {
     private MediaCodecPlayerStatus mMediaCodecPlayerStatus = null;
     private InputSlotListener mInputSlotListener = null;
     private OutputSlotListener mOutputSlotListener = null;
+    private Handler mRenderedHandler = null;
+    private MediaCodec.OnFrameRenderedListener mRenderedListener = null;
 
     public MediaCodecPlayer(Context context, Surface surface, String playerMode, String playerMimeType, String playerPath, boolean isPassThrough, boolean isSecurePlayback) {
         this.mContext = context;
@@ -112,6 +116,10 @@ public class MediaCodecPlayer {
 
     public void setAudioMediaFormat(MediaFormat mediaFormat) {
         mAudioMediaFormat = mediaFormat;
+    }
+
+    public void setFrameRenderedListener(MediaCodec.OnFrameRenderedListener listener) {
+        mRenderedListener = listener;
     }
 
     public void startPlayer() {
@@ -326,9 +334,9 @@ public class MediaCodecPlayer {
     }
 
     public void startTunerPlayer() {
-    Log.d(TAG, "Start tuner player & create av mediacodec callback");
+    Log.d(TAG, "Start tuner player and av mediacodec");
         if (mStarted) {
-            Log.d(TAG, "startLocalPlayer started already");
+            Log.d(TAG, "Tuner player started already");
             return;
         }
         mStarted = true;
@@ -349,9 +357,9 @@ public class MediaCodecPlayer {
     }
 
     public void stopTunerPlayer() {
-    Log.d(TAG, "Stop tuner player");
+    Log.d(TAG, "Ready to stop tuner player");
         if (!mStarted || mStopping) {
-            Log.d(TAG, "startLocalPlayer started already");
+            Log.d(TAG, "Can not stop tuner player!");
             return;
         }
         mStopping = true;
@@ -606,6 +614,7 @@ public class MediaCodecPlayer {
     Log.d(TAG, "Set video & audio mediacodec callback & new LinearInputBlock");
         mMediaCodec.setCallback(mVideoMediaCodecCallback);
         mAudioMediaCodec.setCallback(mAudioMediaCodecCallback);
+        mMediaCodec.setOnFrameRenderedListener(mRenderedListener, mRenderedHandler);
         String[] codecNames = new String[]{ mMediaCodec.getName() };
         if (!mMediaCodec.getCodecInfo().isVendor() && mMediaCodec.getName().startsWith("c2.")) {
             assertTrue("Google default c2.* codecs are copy-free compatible with LinearBlocks",

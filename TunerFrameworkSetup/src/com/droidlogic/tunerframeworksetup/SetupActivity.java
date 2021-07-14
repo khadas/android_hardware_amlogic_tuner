@@ -102,8 +102,9 @@ import java.io.FileDescriptor;
 import java.io.FileOutputStream;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
-public class SetupActivity extends Activity implements OnTuneEventListener, ScanCallback, OnPlaybackStatusChangedListener, OnRecordStatusChangedListener, MediaCodecPlayer.onLicenseReceiveListener{
+public class SetupActivity extends Activity implements OnTuneEventListener, ScanCallback, OnPlaybackStatusChangedListener, OnRecordStatusChangedListener, MediaCodecPlayer.onLicenseReceiveListener, MediaCodec.OnFrameRenderedListener {
 
     private final static String TAG = SetupActivity.class.getSimpleName();
 
@@ -244,7 +245,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
 
     private int mCasSessionNum = 0;
     private CasSessionInfo[] mEsCasInfo = new CasSessionInfo[MAX_CAS_SESSION_NUM];
-    public byte[] mCasKeyToken = new byte[1 + MAX_CAS_SESSION_NUM * (1 + 4)];
+    private byte[] mCasKeyToken = new byte[1 + MAX_CAS_SESSION_NUM * (1 + 4)];
     private int mCasKeyTokenIdx = 0;
     private int mCaSysId = -1;
 
@@ -263,8 +264,11 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     public static final int DEFAULT_DVR_MQ_SIZE_MB = 100;
     public static final int DEFAULT_DVR_READ_TS_PKT_NUM = 100;
     public static final int DEFAULT_DVR_READ_DURATION_MS = 2;
+    public static final int MAX_DVR_READ_DURATION_MS = 4096;
     public static final int DEFAULT_DVR_LOW_THRESHOLD = 100 * 188;
     public static final int DEFAULT_DVR_HIGH_THRESHOLD = 800 * 188;
+    public static final int MIN_DECODER_BUFFER_FREE_THRESHOLD = 40;
+    public static final int MAX_DECODER_BUFFER_FREE_THRESHOLD = 80;
 
     private int mDvrMQSize_MB = DEFAULT_DVR_MQ_SIZE_MB;
     private int mDvrReadTsPktNum = DEFAULT_DVR_READ_TS_PKT_NUM;
@@ -284,6 +288,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private int mDemuxId = 0;
     public int mVideoFilterId = 0;
     public int mAudioFilterId = 0;
+    private AtomicLong mDecoderFreeBufPercentage = new AtomicLong(100);
 
     MediaFormat mVideoMediaFormat = null;
     MediaFormat mAudioMediaFormat = null;
@@ -1209,6 +1214,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                 mAudioMediaFormat = MediaFormat.createAudioFormat(MediaCodecPlayer.AUDIO_MIME_TYPE, MediaCodecPlayer.AUDIO_SAMPLE_RATE, MediaCodecPlayer.AUDIO_CHANNEL_COUNT);
             mMediaCodecPlayer.setVideoMediaFormat(mVideoMediaFormat);
             mMediaCodecPlayer.setAudioMediaFormat(mAudioMediaFormat);
+            mMediaCodecPlayer.setFrameRenderedListener(SetupActivity.this);
             //please use tuner data to mMediaCodecPlayer.WriteInputData(mBlocks, timestampUs, 0, written);
            // if (initSource()) {
             //    sendData();
@@ -2429,6 +2435,14 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         mDvrRecorder.flush();
     }
 
+    public void onFrameRendered(MediaCodec codec, long presentationTimeUs, long nanoTime) {
+        if (mDecoderFreeBufPercentage.get() != presentationTimeUs) {
+            mDecoderFreeBufPercentage.set(presentationTimeUs);
+            if (presentationTimeUs < MIN_DECODER_BUFFER_FREE_THRESHOLD / 2)
+                Log.d(TAG, "onFrameRendered decoderFreeBufPercentage = " + presentationTimeUs + " nanoTime= " + nanoTime);
+        }
+    }
+
     private void readDataToPlay() {
         Log.d(TAG, "readDataToPlay");
         String mDvrReadTsPktNumStr = getPropString("getprop " + DVR_PROP_READ_TSPKT_NUM);
@@ -2440,12 +2454,14 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         String mDurationStr = getPropString("getprop " + DVR_PROP_READ_DATA_DURATION);
         if (mDurationStr != null)
             mDvrReadDataDuration = Integer.parseInt(mDurationStr);
-        final int mDuration = mDvrReadDataDuration;
-        Log.d(TAG, "mDuration: " + mDuration + "ms");
+        Log.d(TAG, "mDvrReadDataDuration: " + mDvrReadDataDuration + "ms");
 
         new Thread(new Runnable() {
             @Override
             public void run() {
+                int mDuration = mDvrReadDataDuration;
+                int mPreDuration = mDvrReadDataDuration;
+                long mPrePercentage = mDecoderFreeBufPercentage.get();
                 int totalReadMBs = 0;
                 int tempMB = 0;
                 boolean mResetDvrPlayback = false;
@@ -2453,6 +2469,40 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                  while (mDvrReadStart.get() && mDvrPlayback != null) {
                     long mReadLen = mDvrPlayback.read(mDvrOnceReadSize);
                     try {
+
+                        if (mPrePercentage > mDecoderFreeBufPercentage.get() &&
+                            mDecoderFreeBufPercentage.get() <= MIN_DECODER_BUFFER_FREE_THRESHOLD &&
+                            mDuration < MAX_DVR_READ_DURATION_MS / 4) {
+                            mDuration = mDuration * 2;
+                            //Log.d(TAG, "mDecoderFreeBufPercentage:" + mDecoderFreeBufPercentage + " mPrePercentage:" + mPrePercentage);
+                            if ((mDecoderFreeBufPercentage.get() <= MIN_DECODER_BUFFER_FREE_THRESHOLD / 2 && mDuration < MAX_DVR_READ_DURATION_MS / 2) ||
+                                (mDecoderFreeBufPercentage.get() <= MIN_DECODER_BUFFER_FREE_THRESHOLD / 4 && mDuration < MAX_DVR_READ_DURATION_MS)) {
+                                mDuration = mDuration * 2;
+                                //Log.d(TAG, "mDecoderFreeBufPercentage:" + mDecoderFreeBufPercentage + " mPrePercentage:" + mPrePercentage);
+                            }
+                        }
+
+                        if (mPrePercentage < mDecoderFreeBufPercentage.get()  &&
+                            mDecoderFreeBufPercentage.get() >= MIN_DECODER_BUFFER_FREE_THRESHOLD &&
+                            mDecoderFreeBufPercentage.get() < MAX_DECODER_BUFFER_FREE_THRESHOLD &&
+                            (mDuration >= 2 * DEFAULT_DVR_READ_DURATION_MS)) {
+                            //Log.d(TAG, "mDecoderFreeBufPercentage:" + mDecoderFreeBufPercentage + " mPrePercentage:" + mPrePercentage);
+                            mDuration = mDuration / 2;
+                        }
+
+                        if ((mDecoderFreeBufPercentage.get() >= MAX_DECODER_BUFFER_FREE_THRESHOLD) &&
+                            (mDuration != DEFAULT_DVR_READ_DURATION_MS)) {
+                            mDuration = DEFAULT_DVR_READ_DURATION_MS;
+                            Log.d(TAG, "Reset duration mDecoderFreeBufPercentage:" + mDecoderFreeBufPercentage);
+                        }
+
+                        if (mPreDuration != mDuration) {
+                            mPreDuration = mDuration;
+                            Log.d(TAG, "mDuration:" + mDuration + "ms" + " mReadLen:" + mReadLen);
+                        }
+                        if (mPrePercentage != mDecoderFreeBufPercentage.get())
+                            mPrePercentage = mDecoderFreeBufPercentage.get();
+
                         Thread.sleep(mDuration);
                         if (mPlayerStart.get() == true && mEnableLocalPlay && !mResetDvrPlayback) {
                             Log.d(TAG, "Reset DvrPlayback");
