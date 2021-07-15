@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.media.AudioTrack;
+import android.media.AudioAttributes;
+import android.media.AudioFormat;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecInfo.CodecCapabilities;
@@ -139,6 +141,8 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private Handler mTaskHandler = null;
     private MediaCodecPlayer mMediaCodecPlayer = null;
     private AudioTrack mAudioTrack = null;
+    private AudioFormat mAudioformat = null;
+    private static boolean mAudioTrackcreated = false;
     private MediaCodec mMediaCodec = null;
 
     private TunerExecutor mExecutor;
@@ -1817,21 +1821,29 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                         case 0x03:
                         case 0x04:
                             mAudioMimeType = MediaFormat.MIMETYPE_AUDIO_MPEG;
+                            mAudioformat = new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_MP3).setSampleRate(4001).setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                                                .build();
                             break;
                         case 0x0e:
                             Log.w(TAG, "Audio auxiliary data.");
                             break;
                         case 0x0f:
                             mAudioMimeType = MediaFormat.MIMETYPE_AUDIO_AAC;
+                            mAudioformat = new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_AAC_LC).setSampleRate(4001).setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                                                .build();
                             break;
                         case 0x11:
                             Log.w(TAG, "MPEG-4 LOAS multi-format framed audio.");
                             break;
                         case 0x81:
                             mAudioMimeType = MediaFormat.MIMETYPE_AUDIO_AC3;
+                            mAudioformat = new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_AC3).setSampleRate(48000).setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                                                .build();
                             break;
                         case 0x87:
                             mAudioMimeType = MediaFormat.MIMETYPE_AUDIO_EAC3;
+                            mAudioformat = new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_E_AC3).setSampleRate(48000).setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                                                .build();
                             break;
                         default:
                             Log.e(TAG, "unknown audio format!");
@@ -1893,7 +1905,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                Log.d(TAG, "mPmtStreams add a video track");
            } else {
                pmtInfo.mPmtStreams.add(new PmtStreamInfo(streamType, esPid, mEsCasInfo[AUDIO_CHANNEL_INDEX].getEcmPid(), mIsVideo));
-               Log.d(TAG, "mPmtStreams add a audio track");
+               Log.d(TAG, "mPmtStreams add a audio track, streamType is " + streamType);
            }
            Log.d(TAG, "mPmtInfo.mPmtStreams.size: " + mPmtInfo.mPmtStreams.size());
            //skip the previous es basic info length
@@ -1917,6 +1929,28 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
             Log.d(TAG, "mAudioFilterId:" + mAudioFilterId);
         }
         Log.d(TAG, "mAvSyncHwId:" + mAvSyncHwId + " mVideoFilterId:" + mVideoFilterId);
+        if (mAudioformat != null) {
+            try {
+                mAudioTrack = new AudioTrack.Builder()
+                    .setAudioAttributes(new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build())
+                    .setAudioFormat(mAudioformat)
+                    .setBufferSizeInBytes(256)
+                    .setEncapsulationMode(AudioTrack.ENCAPSULATION_MODE_HANDLE)
+                    .setTunerConfiguration(new AudioTrack.TunerConfiguration(mAudioFilterId /* contentId */, mAvSyncHwId /* syncId */))
+                    .build();
+                Log.d(TAG, "new audio track done!");
+                mAudioTrackcreated = true;
+            }
+            catch (UnsupportedOperationException e) {
+                Log.d(TAG, "new audio track err:" + e.toString());
+                mAudioTrackcreated = false;
+            }
+        }else {
+            Log.e(TAG, "mAudioformat is null!");
+        }
         mVideoMediaFormat.setInteger("vendor.passthoughMode.video-filter-id", mVideoFilterId);
         if (mAvSyncHwId != 0)
             mAvSyncHwId = mAvSyncHwId | (1 << 16);
@@ -2544,6 +2578,11 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
             Log.e(TAG, "mTestFd is null!");
             return;
         }
+        if (mAudioTrackcreated == true)
+        {
+            Log.e(TAG, "maudiotrack isn't null!");
+            return;
+        }
         Log.d(TAG, "mTestFd: " + mTestFd.getFd());
         mTestFileDescriptor = mTestFd.getFileDescriptor();
 
@@ -2583,6 +2622,12 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         if (mAudioFilter != null) {
             Log.d(TAG, "mAudioFilter stop");
             mAudioFilter.stop();
+        }
+        if (mAudioTrack != null) {
+            Log.d(TAG, "mAudioTrack stop");
+            mAudioTrack.release();
+            mAudioTrack = null;
+            mAudioTrackcreated = false;
         }
         if (mPcrFilter != null) {
             mPcrFilter.stop();
