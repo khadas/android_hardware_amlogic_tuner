@@ -120,58 +120,70 @@ void Demux::postData(void* demux, int fid, bool esOutput, bool passthrough) {
         } else {
             int headerLen = sizeof(dmx_non_sec_es_header);
             tmpData.resize(headerLen);
-            int readRet = dmxDev->getAmDmxDevice()
-                          ->AM_DMX_Read(fid, tmpData.data(), &headerLen);
-            if (readRet != 0) {
-                ALOGE("AM_DMX_Read failed!");
-                return;
-            } else {
-                dmx_non_sec_es_header* esHeader = (dmx_non_sec_es_header*)(tmpData.data());
-                uint32_t dataLen = esHeader->len;
-                //tmpData.resize(headerLen + dataLen);
-                tmpData.resize(dataLen);
-                readRet = 1;
-                while (readRet) {
-                    readRet = dmxDev->getAmDmxDevice()
-                          ->AM_DMX_Read(fid, tmpData.data()/* + headerLen*/, (int*)(&dataLen));
-                    if (readRet != 0) {
-                        ALOGE("AM_DMX_Read ret:0x%x", readRet);
-                    }
-#ifdef TUNERHAL_DBG
-                    mFilterOutputTotalLen += dataLen;
-                    mDropLen += dataLen;
-                    if (mDropLen > mDropTsPktNum * 188) {
-                        //insert tmpData to mFilterOutput
-                        dmxDev->updateFilterOutput(fid, tmpData);
-                        //Copy mFilterOutput to av ion buffer and create mFilterEvent
-                        dmxDev->startFilterHandler(fid);
-                        static int tempMB = 0;
-                        if (mFilterOutputTotalLen/1024/1024 % 2 == 0 && tempMB != mFilterOutputTotalLen/1024/1024) {
-                            tempMB = mFilterOutputTotalLen/1024/1024;
-                            ALOGD("mFilterOutputTotalLen:%d MB", tempMB);
-                        }
-                    } else {
-                        ALOGW("mDropLen:%d KB [%d ts pkts]", mDropLen/1024, mDropLen/188);
-                    }
-                    if (mDumpEsData == 1) {
-                        FILE *filedump = fopen("/data/dump/wvcas.bin", "ab+");
-                        if (filedump != NULL) {
-                            fwrite(tmpData.data(), 1, dataLen, filedump);
-                            fflush(filedump);
-                            fclose(filedump);
-                            filedump = NULL;
-                            ALOGD("Dump dataLen:%d", dataLen);
-                        } else {
-                           ALOGE("open wvcas.bin failed!\n");
-                        }
-                    }
-#else
-                //insert tmpData to mFilterOutput
-                dmxDev->updateFilterOutput(fid, tmpData);
-                //Copy mFilterOutput to av ion buffer and create mFilterEvent
-                dmxDev->startFilterHandler(fid);
-#endif
+            int read_len = 0;
+            int data_len = 0;
+            int readRet  = 0;
+            do {
+                data_len = headerLen - read_len;
+                readRet = dmxDev->getAmDmxDevice()
+                              ->AM_DMX_Read(fid, tmpData.data(), &data_len);
+                if (readRet == 0) {
+                    read_len += data_len;
                 }
+            } while(read_len < headerLen);
+
+            dmx_non_sec_es_header* esHeader = (dmx_non_sec_es_header*)(tmpData.data());
+            uint32_t dataLen = esHeader->len;
+            //tmpData.resize(headerLen + dataLen);
+            tmpData.resize(dataLen);
+            readRet = 1;
+            uint32_t readLen = dataLen;
+            uint32_t totalLen = 0;
+            while (readRet) {
+                readRet = dmxDev->getAmDmxDevice()
+                      ->AM_DMX_Read(fid, tmpData.data()/* + headerLen*/, (int*)(&readLen));
+                totalLen += readLen;
+                if (totalLen < dataLen) {
+                    ALOGD("totalLen= %d, dataLen = %d", totalLen, dataLen);
+                    readLen = dataLen - totalLen;
+                    readRet = 1;
+                    continue;
+                }
+
+#ifdef TUNERHAL_DBG
+                mFilterOutputTotalLen += dataLen;
+                mDropLen += dataLen;
+                if (mDropLen > mDropTsPktNum * 188) {
+                    //insert tmpData to mFilterOutput
+                    dmxDev->updateFilterOutput(fid, tmpData);
+                    //Copy mFilterOutput to av ion buffer and create mFilterEvent
+                    dmxDev->startFilterHandler(fid);
+                    static int tempMB = 0;
+                    if (mFilterOutputTotalLen/1024/1024 % 2 == 0 && tempMB != mFilterOutputTotalLen/1024/1024) {
+                        tempMB = mFilterOutputTotalLen/1024/1024;
+                        ALOGD("mFilterOutputTotalLen:%d MB", tempMB);
+                    }
+                } else {
+                    ALOGW("mDropLen:%d KB [%d ts pkts]", mDropLen/1024, mDropLen/188);
+                }
+                if (mDumpEsData == 1) {
+                    FILE *filedump = fopen("/data/dump/wvcas.bin", "ab+");
+                    if (filedump != NULL) {
+                        fwrite(tmpData.data(), 1, dataLen, filedump);
+                        fflush(filedump);
+                        fclose(filedump);
+                        filedump = NULL;
+                        ALOGD("Dump dataLen:%d", dataLen);
+                    } else {
+                       ALOGE("open wvcas.bin failed!\n");
+                    }
+                }
+#else
+            //insert tmpData to mFilterOutput
+            dmxDev->updateFilterOutput(fid, tmpData);
+            //Copy mFilterOutput to av ion buffer and create mFilterEvent
+            dmxDev->startFilterHandler(fid);
+#endif
             }
         }
     } else {
