@@ -25,8 +25,6 @@
 #include "Lnb.h"
 #include <json/json.h>
 
-#define MAX_DEMUX_DEV_NUM 4
-
 namespace android {
 namespace hardware {
 namespace tv {
@@ -242,12 +240,13 @@ Return<void> Tuner::openFrontendById(uint32_t frontendId, openFrontendById_cb _h
 Return<void> Tuner::openDemux(openDemux_cb _hidl_cb) {
     ALOGV("%s/%d", __FUNCTION__, __LINE__);
 
-    if (mLastUsedId == MAX_DEMUX_DEV_NUM - 1)
-        mLastUsedId = -1;
-    DemuxId demuxId = mLastUsedId + 1;
+    mLastUsedId += 1;
+    if (mLastUsedId == NUMDEMX)
+        mLastUsedId = 0;
+
+    DemuxId demuxId = mLastUsedId;
     sp<Demux> demux = new Demux(demuxId, this);
     mDemuxes[demuxId] = demux;
-    mLastUsedId += 1;
 
     _hidl_cb(Result::SUCCESS, demuxId, demux);
     return Void();
@@ -274,15 +273,15 @@ Return<void> Tuner::getDemuxCaps(getDemuxCaps_cb _hidl_cb) {
 }
 
 Return<void> Tuner::openDescrambler(openDescrambler_cb _hidl_cb) {
-    ALOGV("%s/%d", __FUNCTION__, __LINE__);
 
-    if (mLastUsedDescramblerId == MAX_DEMUX_DEV_NUM - 1)
-        mLastUsedDescramblerId = -1;
+    if (mLastUsedId < 0) {
+        ALOGE("%s/%d Invalid mLastUsedId:%d!", __FUNCTION__, __LINE__, mLastUsedId);
+    }
 
-    uint32_t descramblerId = mLastUsedDescramblerId + 1;
+    uint32_t descramblerId = mLastUsedId;
+
     sp<Descrambler> descrambler = new Descrambler(descramblerId, this);
     mDescramblers[descramblerId] = descrambler;
-    mLastUsedDescramblerId += 1;
 
     _hidl_cb(Result::SUCCESS, descrambler);
     return Void();

@@ -344,16 +344,33 @@ public class MediaCodecPlayer {
             mVideoMediaCodecCallback = new MediaCodecCallback();
         }
 
-        if (mAudioMediaCodecCallback == null) {
+        if (!mIsPassthrough && mAudioMediaCodecCallback == null) {
             mAudioMediaCodecCallback = new AudioMediaCodecCallback();
         }
         //setMediaFormat(mMediaFormat);
-        if (initTunerVideoMediaCodec(mIsPassthrough ? false : true) && initTunerAudioMediaCodec(mIsPassthrough ? false : true)) {
-            startFixedTunerInAndOutListener();
-            initTunerLinearBlock();
-            startAudioMediaCodec();
-            startVideoMediaCodec();
+        if (!initTunerVideoMediaCodec(mIsPassthrough ? false : true)) {
+            Log.e(TAG, "initTunerVideoMediaCodec failed!");
+            return;
+        } else {
+            mMediaCodec.setCallback(mVideoMediaCodecCallback);
+            mMediaCodec.setOnFrameRenderedListener(mRenderedListener, mRenderedHandler);
         }
+
+        if (!mIsPassthrough) {
+            if (!initTunerAudioMediaCodec(true)) {
+                Log.e(TAG, "initTunerAudioMediaCodec failed!");
+                return;
+            } else {
+                mAudioMediaCodec.setCallback(mAudioMediaCodecCallback);
+            }
+        }
+
+        startFixedTunerInAndOutListener();
+        initTunerLinearBlock();
+
+        if (!mIsPassthrough)
+            startAudioMediaCodec();
+        startVideoMediaCodec();
     }
 
     public void stopTunerPlayer() {
@@ -367,6 +384,11 @@ public class MediaCodecPlayer {
             mMediaCodec.stop();
             mMediaCodec.release();
             mMediaCodec = null;
+        }
+        if (!mIsPassthrough && mAudioMediaCodec != null) {
+            mAudioMediaCodec.stop();
+            mAudioMediaCodec.release();
+            mAudioMediaCodec = null;
         }
         if (mLinearInputBlock != null && mLinearInputBlock.block != null) {
             mLinearInputBlock.block.recycle();
@@ -611,10 +633,7 @@ public class MediaCodecPlayer {
     }
 
     private void initTunerLinearBlock() {
-    Log.d(TAG, "Set video & audio mediacodec callback & new LinearInputBlock");
-        mMediaCodec.setCallback(mVideoMediaCodecCallback);
-        mAudioMediaCodec.setCallback(mAudioMediaCodecCallback);
-        mMediaCodec.setOnFrameRenderedListener(mRenderedListener, mRenderedHandler);
+    Log.d(TAG, "Create LinearInputBlock");
         String[] codecNames = new String[]{ mMediaCodec.getName() };
         if (!mMediaCodec.getCodecInfo().isVendor() && mMediaCodec.getName().startsWith("c2.")) {
             assertTrue("Google default c2.* codecs are copy-free compatible with LinearBlocks",

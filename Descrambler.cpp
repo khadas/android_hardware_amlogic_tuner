@@ -16,10 +16,8 @@
 
 #define LOG_TAG "android.hardware.tv.tuner@1.0-Descrambler"
 #include <utils/Log.h>
-
+#include <cutils/properties.h>
 #include "Descrambler.h"
-#include <android/hardware/tv/tuner/1.0/IFrontendCallback.h>
-#include "secmem_ca.h"
 
 namespace android {
 namespace hardware {
@@ -31,8 +29,8 @@ namespace implementation {
 Descrambler::Descrambler(uint32_t descramblerId, sp<Tuner> tuner) {
     mDescramblerId = descramblerId;
     mTunerService = tuner;
-    mAVBothEcm = false;
-    memset(mCasSessionId, INVALID_CAS_SESSION_ID, sizeof(mCasSessionId));
+    mCasDscConfig = nullptr;
+
     ALOGD("%s/%d mDescramblerId:%d", __FUNCTION__, __LINE__, mDescramblerId);
 }
 
@@ -44,102 +42,125 @@ Return<Result> Descrambler::setDemuxSource(uint32_t demuxId) {
     std::lock_guard<std::mutex> lock(mDescrambleLock);
 
     if (mDemuxSet) {
-        ALOGW("%s/%d Descrambler has already been set with a demux id %d", __FUNCTION__, __LINE__, mSourceDemuxId);
+        ALOGW("%s/%d Descrambler has already been set with a demux id %d",
+            __FUNCTION__, __LINE__, mSourceDemuxId);
         return Result::INVALID_STATE;
     }
-    mDemuxSet = true;
-    mSourceDemuxId = demuxId;
-
-    ALOGD("%s/%d Demux id:%d Descrambler id:%d", __FUNCTION__, __LINE__, demuxId, mDescramblerId);
-
     if (mTunerService == nullptr) {
         ALOGE("%s/%d mTunerService is null!", __FUNCTION__, __LINE__);
         return Result::NOT_INITIALIZED;
     }
+
+    mDemuxSet = true;
+    mSourceDemuxId = demuxId;
     mTunerService->attachDescramblerToDemux(mDescramblerId, demuxId);
+
+    int mLocalMode = property_get_int32(TF_DEBUG_ENABLE_LOCAL_PLAY, 1);
+    if (Secure_SetTSNSource(TSN_PATH, mLocalMode == 0 ? TSN_DVB : TSN_IPTV) != 0) {
+        ALOGE("%s/%d Secure_SetTSNSource failed!", __FUNCTION__, __LINE__);
+        return Result::INVALID_STATE;
+    }
+    ALOGD("%s/%d Demux id:%d Descrambler id:%d",
+        __FUNCTION__, __LINE__, demuxId, mDescramblerId);
 
     return Result::SUCCESS;
 }
 
-//keyToken byte[0] cas session num
-//loop start-> i = 1
-//byte[i->i + 3] cas session id
-//byte[i + 4] cas crypto mode
-//i + = 5
 Return<Result> Descrambler::setKeyToken(const hidl_vec<uint8_t>& keyToken) {
     ALOGD("%s/%d", __FUNCTION__, __LINE__);
     std::lock_guard<std::mutex> lock(mDescrambleLock);
-    cas_crypto_mode crypto_mode[MAX_CHANNEL_NUM];
-    ca_sc2_algo_type dsc_algo[MAX_CHANNEL_NUM];
-    ca_sc2_dsc_type dsc_type[MAX_CHANNEL_NUM];
-    uint16_t es_pid[MAX_CHANNEL_NUM];
 
-    if (keyToken.size() == 0) {
-        ALOGE("%s/%d Empty key token!", __FUNCTION__, __LINE__);
-        return Result::SUCCESS;
-    }
-    if (added_pid.size() == 0) {
-        ALOGE("%s/%d No pid has been added, need add pid first!", __FUNCTION__, __LINE__);
-        return Result::INVALID_STATE;
-    }
-    if (Secure_CreateDscCtx(&mDscCtx) !=0) {
-        ALOGE("%s/%d Secure_CreateDscCtx failed!", __FUNCTION__, __LINE__);
-        return Result::INVALID_STATE;
-    }
+    int cas_sid_size, token_size, token_idx, channel_idx, pid_idx;
+    token_size = keyToken.size();
 
-    if (Secure_SetTSNSource(TSN_PATH, TSN_IPTV) != 0) {
-        ALOGE("%s/%d Secure_SetTSNSource failed!", __FUNCTION__, __LINE__);
-        return Result::INVALID_STATE;
-    }
-
-    memset(crypto_mode, ALGO_INVALID, sizeof(crypto_mode));
-    memset(dsc_algo, CA_ALGO_CSA2, sizeof(dsc_algo));
-    memset(dsc_type, CA_DSC_COMMON_TYPE, sizeof(dsc_type));
-    memset(es_pid, 0x1FFF, sizeof(es_pid));
-
-    uint32_t token_idx = 0;
-    uint32_t cas_session_idx, cas_session_bit_idx;
-    uint32_t cas_session_num = keyToken[0];
-    token_idx += 1;
-    if (cas_session_num <= 0 || cas_session_num > 2 || keyToken.size() < 1 + 4 * cas_session_num) {
-        ALOGE("%s/%d Invalid key token! cas session number:%d ", __FUNCTION__, __LINE__, cas_session_num );
+    if (token_size == 0) {
+        ALOGE("%s/%d Invalid key token!", __FUNCTION__, __LINE__);
         return Result::INVALID_ARGUMENT;
     }
-    mAVBothEcm = (cas_session_num > 1) ? true : false;
 
-    cas_session_bit_idx = (token_idx + 4) - 1;
-    for (cas_session_idx = 0; cas_session_idx < cas_session_num; cas_session_idx ++) {
-        mCasSessionId[cas_session_idx] = (mCasSessionId[cas_session_idx] << 8) | keyToken[cas_session_bit_idx];
-        mCasSessionId[cas_session_idx] = (mCasSessionId[cas_session_idx] << 8) | keyToken[cas_session_bit_idx - 1];
-        mCasSessionId[cas_session_idx] = (mCasSessionId[cas_session_idx] << 8) | keyToken[cas_session_bit_idx - 2];
-        mCasSessionId[cas_session_idx] = (mCasSessionId[cas_session_idx] << 8) | keyToken[cas_session_bit_idx - 3];
-        ALOGD("%s/%d mCasSessionId[%d]:%u cas_session_num:%d", __FUNCTION__, __LINE__, cas_session_idx, mCasSessionId[cas_session_idx], cas_session_num);
-        crypto_mode[cas_session_idx] = (cas_crypto_mode)keyToken[cas_session_bit_idx + 1];
-        if (crypto_mode[cas_session_idx] == ALGO_INVALID) {
-            ALOGE("%s/%d Invalid crypto mode!", __FUNCTION__, __LINE__);
+    if (mCasDscConfig != nullptr) {
+        mCasDscConfig = (Cas_Dsc_Config*)malloc(sizeof(Cas_Dsc_Config));
+        if (!mCasDscConfig) {
+            ALOGE("%s/%d Malloc for mCasDscConfig failed!", __FUNCTION__, __LINE__);
+            return Result::OUT_OF_MEMORY;
+        } else {
+            memset(mCasDscConfig, 0, sizeof(Cas_Dsc_Config));
+        }
+    }
+    mCasDscConfig->mDscCtx = nullptr;
+    if (Secure_CreateDscCtx(&mCasDscConfig->mDscCtx) != 0) {
+        ALOGE("%s/%d Secure_CreateDscCtx failed!", __FUNCTION__, __LINE__);
+        close();
+        return Result::INVALID_STATE;
+    } else {
+        ALOGD("%s/%d Secure_CreateDscCtx success", __FUNCTION__, __LINE__);
+    }
+
+    //Default use TSN DVB CSA2 algorithm
+    memset(mCasDscConfig->mCryptoMode, ALGO_DVB_CSA2, sizeof(mCasDscConfig->mCryptoMode));
+    memset(mCasDscConfig->mDscAlgo, CA_ALGO_CSA2, sizeof(mCasDscConfig->mDscAlgo));
+    memset(mCasDscConfig->mDscType, CA_DSC_COMMON_TYPE, sizeof(mCasDscConfig->mDscType));
+    memset(mCasDscConfig->mPid, 0x1FFF, sizeof(mCasDscConfig->mPid));
+
+    cas_sid_size = sizeof(mCasDscConfig->mCasSessionId);
+    if (token_size < cas_sid_size) {
+        ALOGE("%s/%d Invalid key token size:%d!", __FUNCTION__, __LINE__, token_size);
+        return Result::INVALID_ARGUMENT;
+    }
+
+    for (token_idx = cas_sid_size - 1; token_idx >= 0; --token_idx) {
+      mCasDscConfig->mCasSessionId = (mCasDscConfig->mCasSessionId << 8) | keyToken[token_idx];
+    }
+    token_idx = cas_sid_size;
+    ALOGD("Descrambler: mCasSessionId %u", mCasDscConfig->mCasSessionId);
+    if (token_size > cas_sid_size) {
+        mCasDscConfig->mDscChannelNum = keyToken[token_idx];
+        ALOGD("The key token contains additional information. mDscChannelNum:%d", mCasDscConfig->mDscChannelNum);
+        token_idx += 1;
+        if (mCasDscConfig->mDscChannelNum > MAX_CHANNEL_NUM) {
+            ALOGE("Invalid mDscChannelNum:%d!", mCasDscConfig->mDscChannelNum);
+            close();
             return Result::INVALID_ARGUMENT;
         }
-        Secure_GetDscParas(crypto_mode[cas_session_idx], &dsc_algo[cas_session_idx], &dsc_type[cas_session_idx]);
-        cas_session_bit_idx += 5;
+        for (channel_idx = 0; channel_idx < mCasDscConfig->mDscChannelNum; channel_idx++) {
+            mCasDscConfig->mCryptoMode[channel_idx] = (cas_crypto_mode)keyToken[token_idx];
+            Secure_GetDscParas(mCasDscConfig->mCryptoMode[channel_idx],
+                &mCasDscConfig->mDscAlgo[channel_idx],
+                &mCasDscConfig->mDscType[channel_idx]);
+            token_idx += 1;
+        }
     }
-    if (cas_session_num != 1 && crypto_mode[0] != crypto_mode[1]) {
-        ALOGE("%s/%d Invalid crypto mode!", __FUNCTION__, __LINE__);
-        return Result::INVALID_ARGUMENT;
+
+    set<uint16_t>::iterator it;
+    pid_idx = 0;
+    for (it = added_pid.begin(); it != added_pid.end(); it++) {
+        mCasDscConfig->mPid[pid_idx] = *it;
+        ALOGD("%s/%d Dsc channel pid[%d]:0x%x", __FUNCTION__, __LINE__, pid_idx, mCasDscConfig->mPid[pid_idx]);
+        pid_idx += 1;
     }
-    if (added_pid.size() == 1) {
-        es_pid[VIDEO_CHANNEL_INDEX] = *(added_pid.begin());
-    } else if (added_pid.size() >= 2) {
-        es_pid[AUDIO_CHANNEL_INDEX] = *(added_pid.begin());
-        es_pid[VIDEO_CHANNEL_INDEX] = *(++added_pid.begin());
+    if (pid_idx == 0) {
+        ALOGW("No pid has been added!");
+        return Result::SUCCESS;
     }
-    ALOGD("%s/%d es_pid[0]:0x%x es_pid[1]:0x%x", __FUNCTION__, __LINE__, es_pid[VIDEO_CHANNEL_INDEX], es_pid[AUDIO_CHANNEL_INDEX]);
-    if (Secure_CreateDscPipeline(mDscCtx, mSourceDemuxId, es_pid[VIDEO_CHANNEL_INDEX], es_pid[AUDIO_CHANNEL_INDEX], mAVBothEcm, mCasSessionId[cas_session_num - 1])) {
-        ALOGE("%s/%d Create cas dsc pipeline failed!", __FUNCTION__, __LINE__);
+    bool mAvDiffEcm = mCasDscConfig->mDscChannelNum > 1 ? true : false;
+    if (Secure_CreateDscPipeline(mCasDscConfig->mDscCtx,
+            mDescramblerId,
+            mCasDscConfig->mPid[VIDEO_CHANNEL_INDEX],
+            mCasDscConfig->mPid[AUDIO_CHANNEL_INDEX],
+            mAvDiffEcm,
+            mCasDscConfig->mCasSessionId)) {
+        ALOGE("%s/%d Secure_CreateDscPipeline failed!", __FUNCTION__, __LINE__);
+        close();
         return Result::INVALID_STATE;
     }
 
-    if (Secure_StartDescrambling(mDscCtx, dsc_algo[0], dsc_type[0], mCasSessionId[VIDEO_CHANNEL_INDEX], mCasSessionId[AUDIO_CHANNEL_INDEX])) {
-        ALOGE("%s/%d Start cas descrambling failed!", __FUNCTION__, __LINE__);
+    if (Secure_StartDescrambling(mCasDscConfig->mDscCtx,
+            mCasDscConfig->mDscAlgo[VIDEO_CHANNEL_INDEX],
+            mCasDscConfig->mDscType[VIDEO_CHANNEL_INDEX],
+            mCasDscConfig->mCasSessionId,
+            INVALID_CAS_SESSION_ID)) {
+        ALOGE("%s/%d Secure_StartDescrambling failed!", __FUNCTION__, __LINE__);
+        close();
         return Result::INVALID_STATE;
     }
 
@@ -152,6 +173,7 @@ Return<Result> Descrambler::addPid(const DemuxPid& pid, const sp<IFilter>& filte
     ALOGD("%s/%d pid:0x%x", __FUNCTION__, __LINE__, pid.tPid());
     // Assume transport stream pid only.
     added_pid.insert(pid.tPid());
+
     return Result::SUCCESS;
 }
 
@@ -167,14 +189,22 @@ Return<Result> Descrambler::removePid(const DemuxPid& pid, const sp<IFilter>& fi
 Return<Result> Descrambler::close() {
     std::lock_guard<std::mutex> lock(mDescrambleLock);
     ALOGD("%s/%d", __FUNCTION__, __LINE__);
-    if (mDscCtx != nullptr) {
-        if (Secure_StopDescrambling(mDscCtx)) {
-            ALOGE("%s/%d Stop cas descrambling failed!", __FUNCTION__, __LINE__);
+    if (mCasDscConfig != nullptr) {
+        if (mCasDscConfig->mDscCtx != nullptr) {
+            if (Secure_StopDescrambling(mCasDscConfig->mDscCtx)) {
+                ALOGE("%s/%d Secure_StopDescrambling failed!", __FUNCTION__, __LINE__);
+            }
+            Secure_DestroyDscCtx(&mCasDscConfig->mDscCtx);
+            mCasDscConfig->mDscCtx = nullptr;
+        } else {
+            ALOGW("%s/%d mDscCtx is null!", __FUNCTION__, __LINE__);
         }
-        Secure_DestroyDscCtx(&mDscCtx);
+        free(mCasDscConfig);
+        mCasDscConfig = nullptr;
     } else {
-        ALOGE("%s/%d mDscCtx is null!", __FUNCTION__, __LINE__);
+        ALOGW("%s/%d mCasDscConfig is null!", __FUNCTION__, __LINE__);
     }
+
     mDemuxSet = false;
     mTunerService->detachDescramblerFromDemux(mDescramblerId, mSourceDemuxId);
 

@@ -19,9 +19,9 @@
 
 #include <android/hardware/tv/tuner/1.0/IDescrambler.h>
 #include <android/hardware/tv/tuner/1.0/ITuner.h>
-#include <fmq/MessageQueue.h>
 #include <inttypes.h>
 #include "Tuner.h"
+#include "secmem_ca.h"
 
 using namespace std;
 
@@ -37,9 +37,15 @@ namespace implementation {
 #define AUDIO_CHANNEL_INDEX 1
 #define INVALID_CAS_SESSION_ID -1
 
-using ::android::hardware::kSynchronizedReadWrite;
-using ::android::hardware::MessageQueue;
-using DvrMQ = MessageQueue<uint8_t, kSynchronizedReadWrite>;
+typedef struct __AM_CAS_DSC_CONFIG {
+    void *mDscCtx;
+    uint32_t mCasSessionId;
+    uint32_t mDscChannelNum;
+    cas_crypto_mode mCryptoMode[MAX_CHANNEL_NUM];
+    ca_sc2_algo_type mDscAlgo[MAX_CHANNEL_NUM];
+    ca_sc2_dsc_type mDscType[MAX_CHANNEL_NUM];
+    uint16_t mPid[MAX_CHANNEL_NUM];
+} Cas_Dsc_Config;
 
 class Tuner;
 
@@ -72,9 +78,7 @@ class Descrambler : public IDescrambler {
   uint32_t mSourceDemuxId;
   bool mDemuxSet = false;
   std::mutex mDescrambleLock;
-  void *mDscCtx = nullptr;
-  uint32_t mCasSessionId[MAX_CHANNEL_NUM];
-  bool mAVBothEcm;
+  Cas_Dsc_Config *mCasDscConfig;
 };
 
 }  // namespace implementation

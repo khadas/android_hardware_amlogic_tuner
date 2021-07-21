@@ -48,7 +48,7 @@ class HwFeState;
 #define NUMPESFILTER 32
 #define NUMPCRFILTER 32
 #define NUMBYTESINSECTIONFILTER 16
-
+#define TF_DEBUG_ENABLE_LOCAL_PLAY "vendor.tf.enable.localplay"
 
 class Tuner : public ITuner {
   public:
@@ -112,7 +112,6 @@ class Tuner : public ITuner {
     // The last used demux id. Initial value is -1.
     // First used id will be 0.
     uint32_t mLastUsedId = -1;
-    int mLastUsedDescramblerId = -1;
     vector<sp<Lnb>> mLnbs;
     vector<sp<HwFeState>> mHwFes;
 };

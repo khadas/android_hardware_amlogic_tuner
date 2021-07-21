@@ -29,7 +29,7 @@ namespace implementation {
 
 #define WAIT_TIMEOUT 3000000000
 #define PSI_MAX_SIZE 4096
-#define TF_DEBUG_ENABLE_LOCAL_PLAY "vendor.tf.enable.localplay"
+
 static int mSupportLocalPlayer = 1;
 
 #ifdef TUNERHAL_DBG
@@ -177,7 +177,7 @@ void Demux::postData(void* demux, int fid, bool esOutput, bool passthrough) {
                     ALOGW("mDropLen:%d KB [%d ts pkts]", mDropLen/1024, mDropLen/188);
                 }
                 if (mDumpEsData == 1) {
-                    FILE *filedump = fopen("/data/dump/wvcas.bin", "ab+");
+                    FILE *filedump = fopen("/data/dump/demux_out.es", "ab+");
                     if (filedump != NULL) {
                         fwrite(tmpData.data(), 1, dataLen, filedump);
                         fflush(filedump);
@@ -185,7 +185,7 @@ void Demux::postData(void* demux, int fid, bool esOutput, bool passthrough) {
                         filedump = NULL;
                         ALOGD("Dump dataLen:%d", dataLen);
                     } else {
-                       ALOGE("open wvcas.bin failed!\n");
+                       ALOGE("Open demux_out.es failed!\n");
                     }
                 }
 #else
