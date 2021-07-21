@@ -60,6 +60,10 @@ Demux::Demux(uint32_t demuxId, sp<Tuner> tuner) {
     AmDmxDevice->AM_DMX_Open();
     mMediaSyncWrap = new MediaSyncWrap();
     mAmDvrDevice = new AmDvr(mDemuxId);
+     //dump ts file
+    //mfd = ::open("/data/local/tmp/media_demux.ts",  O_WRONLY|O_CREAT, 0666);
+    //ALOGD("need dump ts file: ts file fd =%d %d", mfd, errno);
+
 }
 
 Demux::~Demux() {
@@ -68,24 +72,30 @@ Demux::~Demux() {
 
 void Demux::postDvrData(void* demux) {
     Demux *dmxDev = (Demux*)demux;
-    int ret, cnt = -1;
-    int size = 256 * 1024;
+    int ret = -1;
+    int cnt = -1;
+    int size = 10 * 188;
     vector<uint8_t> dvrData;
-
     dvrData.resize(size);
     cnt = size;
+
     ret = dmxDev->getAmDvrDevice()->AM_DVR_Read(dvrData.data(), &cnt);
     if (ret != 0) {
         ALOGE("No data available from DVR");
-        usleep(200 * 1000);
+        //usleep(200 * 1000);
         return;
     }
 
-    if (cnt > size)
-    {
-        ALOGE("return size:0x%0x bigger than 0x%0x input buf\n",cnt, size);
-        return;
+    if (cnt < size) {
+        //ALOGD("read dvr read size = %d", cnt);
     }
+
+    /*
+    ALOGD("dmxDev->mfd = %d", dmxDev->mfd);
+    if (dmxDev->mfd > 0) { //data/local/tmp/media_demux.ts
+        write(dmxDev->mfd, dvrData.data(), cnt);
+    }*/
+    dvrData.resize(cnt);
     dmxDev->sendFrontendInputToRecord(dvrData);
     dmxDev->startRecordFilterDispatcher();
 }
@@ -201,6 +211,7 @@ void Demux::postData(void* demux, int fid, bool esOutput, bool passthrough) {
         }
     }
 }
+
 
 Return<Result> Demux::setFrontendDataSource(uint32_t frontendId) {
     ALOGD("%s/%d", __FUNCTION__, __LINE__);
@@ -486,13 +497,19 @@ void Demux::startBroadcastTsFilter(vector<uint8_t> data) {
 
 void Demux::sendFrontendInputToRecord(vector<uint8_t> data) {
     std::lock_guard<std::mutex> lock(mFilterLock);
-    set<uint32_t>::iterator it;
-    if (DEBUG_DEMUX) {
-        ALOGW("[Demux] update record filter output");
+    if (mRecordFilterIds.size() == 0) {
+        ALOGD("no record filter id");
+        return;
     }
+    set<uint32_t>::iterator it = mRecordFilterIds.begin();
+    if (DEBUG_DEMUX) {
+        ALOGW("[Demux] update record filter output data size = %d", data.size());
+    }
+    mFilters[*it]->updateRecordOutput(data);
+    /*
     for (it = mRecordFilterIds.begin(); it != mRecordFilterIds.end(); it++) {
         mFilters[*it]->updateRecordOutput(data);
-    }
+    }*/
 }
 
 bool Demux::startBroadcastFilterDispatcher() {
@@ -511,13 +528,21 @@ bool Demux::startBroadcastFilterDispatcher() {
 
 bool Demux::startRecordFilterDispatcher() {
     std::lock_guard<std::mutex> lock(mFilterLock);
-    set<uint32_t>::iterator it;
+    if (mRecordFilterIds.size() == 0) {
+        ALOGD("no record filter id");
+        return false;
+    }
+    set<uint32_t>::iterator it = mRecordFilterIds.begin();
 
+    if (mFilters[*it]->startRecordFilterHandler() != Result::SUCCESS) {
+        return false;
+    }
+    /*
     for (it = mRecordFilterIds.begin(); it != mRecordFilterIds.end(); it++) {
         if (mFilters[*it]->startRecordFilterHandler() != Result::SUCCESS) {
             return false;
         }
-    }
+    }*/
 
     return true;
 }

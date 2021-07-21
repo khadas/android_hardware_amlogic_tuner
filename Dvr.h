@@ -153,6 +153,7 @@ class Dvr : public IDvr {
     // Booleans to check if recording is running.
     // Recording is ready when both of the following are set to true.
     bool mIsRecordStarted = false;
+    //int mFd;
 };
 
 }  // namespace implementation

@@ -245,6 +245,10 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
                     pparam.output = DMX_OUT_TS_TAP;
                     pparam.pes_type = DMX_PES_OTHER;
                     if (mDemux->getAmDmxDevice()
+                        ->AM_DMX_SetBufferSize(mFilterId, 10 * 1024 * 1024) != 0 ) {
+                        return Result::UNAVAILABLE;
+                    }
+                    if (mDemux->getAmDmxDevice()
                         ->AM_DMX_SetPesFilter(mFilterId, &pparam) != 0 ) {
                         ALOGE("record AM_DMX_SetPesFilter");
                         return Result::UNAVAILABLE;
@@ -846,7 +850,9 @@ Result Filter::startRecordFilterHandler() {
     }
 
     // Create tsRecEvent and send callback
-    ALOGD("[Filter] create tsRecEvent mTpid = %d and send callback.", mTpid);
+    if (DEBUG_FILTER) {
+        ALOGD("[Filter] create tsRecEvent mTpid = %d and send callback.", mTpid);
+    }
     DemuxFilterTsRecordEvent tsRecEvent;
     DemuxPid demuxPid;
     demuxPid.tPid(static_cast<DemuxTpid>(mTpid));

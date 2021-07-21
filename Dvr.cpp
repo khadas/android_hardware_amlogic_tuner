@@ -36,6 +36,9 @@ Dvr::Dvr(DvrType type, uint32_t bufferSize, const sp<IDvrCallback>& cb, sp<Demux
     mCallback = cb;
     mDemux = demux;
     ALOGD("%s/%d type:%d bufsize:%d MB", __FUNCTION__, __LINE__, (int)type, bufferSize/1024/1024);
+     //dump ts file
+    //mFd = ::open("/data/local/tmp/media_dvr.ts",  O_WRONLY|O_CREAT, 0666);
+    //ALOGD("need dump ts file: ts file fd =%d %d", mFd, errno);
 }
 
 Dvr::~Dvr() {
@@ -328,6 +331,10 @@ bool Dvr::writeRecordFMQ(const std::vector<uint8_t>& data) {
     if (mDvrMQ->write(data.data(), data.size())) {
         mDvrEventFlag->wake(static_cast<uint32_t>(DemuxQueueNotifyBits::DATA_READY));
         maySendRecordStatusCallback();
+        /*
+        if (mFd > 0) { //data/local/tmp/media.ts
+            write(mFd, data.data(), data.size());
+        }*/
         return true;
     }
     maySendRecordStatusCallback();

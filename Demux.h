@@ -213,6 +213,7 @@ class Demux : public IDemux {
     const bool DEBUG_DEMUX = false;
     sp<MediaSyncWrap> mMediaSyncWrap;
     sp<AmDvr> mAmDvrDevice;
+    //int mfd;
 };
 
 }  // namespace implementation

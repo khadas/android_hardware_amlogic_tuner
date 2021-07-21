@@ -82,11 +82,11 @@ static AM_ErrorCode_t dvr_read(AM_DVR_Device_t *dev, uint8_t *buf, int *size)
     int len = *size;
     int ret;
 
-    if(fd==-1)
+    if (fd == -1)
         return AM_DVR_ERR_NOT_ALLOCATED;
 
     ret = read(fd, buf, len);
-    if(ret<=0)
+    if (ret <= 0)
     {
         if(errno==ETIMEDOUT)
             return AM_DVR_ERR_TIMEOUT;
