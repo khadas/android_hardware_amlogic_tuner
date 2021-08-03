@@ -181,6 +181,7 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
                         uint32_t dmxId = mDemux->getAmDmxDevice()->dev_no;
                         mFilterId      = (dmxId << 16) | (uint32_t)(mTpid);
                         ALOGD("audio filter id = %d", mFilterId);
+                        mDemux->addPassthroughMediaFilterId(mFilterId);
                     } else {
                         struct dmx_pes_filter_params aparam;
                         memset(&aparam, 0, sizeof(aparam));
@@ -209,6 +210,7 @@ Return<Result> Filter::configure(const DemuxFilterSettings& settings) {
                         uint32_t dmxId = mDemux->getAmDmxDevice()->dev_no;
                         mFilterId      = (dmxId << 16) | (uint32_t)(mTpid);
                         ALOGD("video filter id = %d", mFilterId);
+                        mDemux->addPassthroughMediaFilterId(mFilterId);
                     } else {
                         int buffSize = 0;
                         struct dmx_pes_filter_params vparam;
