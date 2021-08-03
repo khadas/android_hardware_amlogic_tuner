@@ -114,6 +114,8 @@ class Demux : public IDemux {
     void attachDescrambler(uint32_t descramblerId, sp<Descrambler> descrambler);
     void detachDescrambler(uint32_t descramblerId);
     sp<AmDvr> getAmDvrDevice();
+    void addPassthroughMediaFilterId(uint32_t filterId);
+    bool isPassthroughMediaFilterId(uint32_t filterId);
 
   private:
     // Tuner service
@@ -176,6 +178,8 @@ class Demux : public IDemux {
      * Local reference to the opened Timer Filter instance.
      */
     sp<TimeFilter> mTimeFilter;
+
+    set<uint32_t> mPassThroughMediaFilterIds;
 
     /**
      * Local reference to the opened DVR object.

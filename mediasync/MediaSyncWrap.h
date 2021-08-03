@@ -16,7 +16,9 @@ class MediaSyncWrap : public RefBase {
 public:
     MediaSyncWrap();
     ~MediaSyncWrap();
-    int getAvSyncHwId(int dmxId, int pcrPid);
+    int getAvSyncHwId(int dmxId, int pid);
+    int64_t getAvSyncTime();
+
 private:
     void* mMediaSync;
 
