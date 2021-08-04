@@ -269,6 +269,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     FileDescriptor mTestFileDescriptor = null;
     //Dvr message queue default size
     public static final int DEFAULT_DVR_MQ_SIZE_MB = 100;
+    public static final int SECTION_FILTER_BUFFER_SIZE = 32 * 1024;
     public static final int DEFAULT_DVR_READ_TS_PKT_NUM = 100;
     public static final int DEFAULT_DVR_READ_DURATION_MS = 2;
     public static final int MAX_DVR_READ_DURATION_MS = 4096;
@@ -291,7 +292,9 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private String mVideoMimeType = MediaCodecPlayer.TEST_MIME_TYPE;
     private String mAudioMimeType = MediaCodecPlayer.AUDIO_MIME_TYPE;
     private boolean mPassthroughMode = false;
+    private boolean mUseCodec2 = false;
     private int mAvSyncHwId = 0;
+    private int mAvSyncIdPassthroughFlag = 1 << 16;
     private int mDemuxId = 0;
     public int mVideoFilterId = 0;
     public int mAudioFilterId = 0;
@@ -309,6 +312,9 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
 
     private String mScanMode = "Dvbt";
     private String mStreamMode = "tuner";
+
+    private static final String VIDEO_FILTER_ID_KEY = "vendor.tunerhal.video-filter-id";
+    private static final String HW_AV_SYNC_ID_KEY = "vendor.tunerhal.hw-av-sync-id";//MediaFormat.KEY_HARDWARE_AV_SYNC_ID
 
     private static final String DVR_PROP_MQ_SIZE = "vendor.tf.dvrmq.size";
     private static final String DVR_PROP_READ_TSPKT_NUM = "vendor.tf.dvr.tspkt_num";
@@ -1406,45 +1412,44 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private FilterCallback mEcmFilterCallback = new FilterCallback() {
         @Override
         public void onFilterEvent(Filter filter, FilterEvent[] events) {
-            int waitRetry = 200;
+            int secLen = 0;
+            byte[] data = null;
+            SectionEvent sectionEvent = null;
             if (mDebugFilter)
                 Log.d(TAG, "onEcmFilterEvent" + " filter id:" + filter.getId());
-            while (mLicenseReceived.get() == false) {
-                if (waitRetry % 10 == 0)
-                    Log.d(TAG, "Waiting for cas license!");
-                try {
-                    Thread.sleep(20);
-                } catch (Exception e) {
-                    e.printStackTrace();
+
+            for (FilterEvent event: events) {
+                if (event instanceof SectionEvent) {
+                    sectionEvent = (SectionEvent)event;
+                } else {
+                    Log.e(TAG, "Invalid filter event type!");
+                    continue;
                 }
-                if (waitRetry-- == 0) {
-                    Log.e(TAG, "Get license timeout!");
-                    return;
-                }
-                continue;
             }
+            if (sectionEvent == null) {
+                Log.e(TAG, "sectionEvent is null!");
+                return;
+            }
+
+            secLen = sectionEvent.getDataLength();
+            if (mDebugFilter)
+                Log.d(TAG, "Receive ecm section data size:" + secLen);
+            if (secLen <= 0) {
+                Log.e(TAG, "Invalid secLen:" + secLen);
+                return;
+            }
+            data = new byte[secLen];
+            filter.read(data, 0, secLen);
+
+            if (mLicenseReceived.get() == false)
+                return;
+
+            if (mDebugFilter)
+                Log.d(TAG, "License received");
             if (mPlayerStart.get() == false) {
                 Log.d(TAG, "mPlayerStart is false" + " filter id:" + filter.getId());
             }
-            for (FilterEvent event: events) {
-                if (event instanceof MediaEvent) {
-                    MediaEvent mediaEvent = (MediaEvent) event;
-                    Log.d(TAG, "MediaEvent length =" +  mediaEvent.getDataLength() + " \n\" + MediaEvent audio =" + mediaEvent.getExtraMetaData());
-                    Log.w(TAG, "Invalid filter event type:MediaEvent!");
-                } else if (event instanceof SectionEvent) {
-                    SectionEvent sectionEvent = (SectionEvent)event;
-                    int secLen = sectionEvent.getDataLength();
-                    if (mDebugFilter)
-                        Log.d(TAG, "Receive ecm section data, size=" + secLen);
-                    byte[] data = new byte[secLen];
-                    filter.read(data, 0, secLen);
-                    parseEcmSectionData(data, filter.getId());
-                } else if (event instanceof TsRecordEvent) {
-                    TsRecordEvent tsRecEvent = (TsRecordEvent) event;
-                    Log.d(TAG, "Receive tsRecord data, size=" + tsRecEvent.getDataLength());
-                    Log.w(TAG, "Invalid filter event type:TsRecordEvent!");
-                }
-            }
+            parseEcmSectionData(data, filter.getId());
         }
 
         @Override
@@ -1796,6 +1801,9 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                    switch(streamType) {
                     case 0x01:
                     case 0x02:
+                        mVideoMimeType = MediaFormat.MIMETYPE_VIDEO_MPEG2;
+                        break;
+                    case 0x10:
                         mVideoMimeType = MediaFormat.MIMETYPE_VIDEO_MPEG4;
                         break;
                     case 0x1b:
@@ -1954,11 +1962,14 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         }else {
             Log.e(TAG, "mAudioformat is null!");
         }
-        mVideoMediaFormat.setInteger("vendor.passthoughMode.video-filter-id", mVideoFilterId);
         if (mAvSyncHwId != 0)
-            mAvSyncHwId = mAvSyncHwId | (1 << 16);
-        mVideoMediaFormat.setInteger("audio-hw-sync", mAvSyncHwId);
-        //mVideoMediaFormat.setInteger(MediaFormat.KEY_HARDWARE_AV_SYNC_ID, mAvSyncHwId);//"hw-av-sync-id", support with Codec2
+            mAvSyncHwId = mAvSyncHwId | mAvSyncIdPassthroughFlag;
+        mVideoMediaFormat.setInteger(VIDEO_FILTER_ID_KEY, mVideoFilterId);
+        if (mUseCodec2) {
+            mVideoMediaFormat.setInteger(HW_AV_SYNC_ID_KEY, mAvSyncHwId);
+        } else {
+            mVideoMediaFormat.setInteger("audio-hw-sync", mAvSyncHwId);
+        }
         mVideoMediaFormat.setFeatureEnabled(CodecCapabilities.FEATURE_TunneledPlayback, true);
     }
 
@@ -2224,7 +2235,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                 mPatSectionFilter.stop();
             }
             Log.d(TAG, "Open mPatSectionFilter");
-            mPatSectionFilter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_SECTION, 32 * 1024, mExecutor, mfilterCallback);
+            mPatSectionFilter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_SECTION, SECTION_FILTER_BUFFER_SIZE, mExecutor, mfilterCallback);
             mPatSectionFilter.configure(config);
             mPatSectionFilter.start();
         } else if (tid == PMT_TID) {
@@ -2233,7 +2244,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
             }
             Log.d(TAG, "Open mPmtSectionFilter");
             if (mPmtSectionFilter == null) {
-                mPmtSectionFilter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_SECTION, 32 * 1024, mExecutor, mfilterCallback);
+                mPmtSectionFilter = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_SECTION, SECTION_FILTER_BUFFER_SIZE, mExecutor, mfilterCallback);
                 mPmtSectionFilter.configure(config);
                 mPmtSectionFilter.start();
             } else {
@@ -2277,7 +2288,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         .setSettings(settings)
         .build();
 
-        mEsCasInfo[esIdx].mEcmSectionFilter[ecmFilterIdx] = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_SECTION, 1024 * 4, mExecutor, mEcmFilterCallback);
+        mEsCasInfo[esIdx].mEcmSectionFilter[ecmFilterIdx] = mTuner.openFilter(Filter.TYPE_TS, Filter.SUBTYPE_SECTION, SECTION_FILTER_BUFFER_SIZE, mExecutor, mEcmFilterCallback);
         mEsCasInfo[esIdx].mEcmSectionFilter[ecmFilterIdx].configure(config);
         mEsCasInfo[esIdx].mEcmSectionFilter[ecmFilterIdx].start();
         Log.d(TAG, "Section ecm filter(0x" + Integer.toHexString(pid) + ") start");
