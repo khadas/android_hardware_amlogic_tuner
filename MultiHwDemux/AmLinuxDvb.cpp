@@ -305,7 +305,8 @@ AM_ErrorCode_t AmLinuxDvb::dvb_read(AM_DMX_Device *dev, AM_DMX_Filter *filter, u
     }
     ret = read(fd, buf, len);
     if (ret < 0) {
-        ALOGE("read demux failed (%s) %d", strerror(errno), errno);
+        if (errno != EAGAIN)
+            ALOGE("read demux failed (%s) %d", strerror(errno), errno);
         if (errno == ETIMEDOUT) {
             return AM_DMX_ERR_TIMEOUT;
         }

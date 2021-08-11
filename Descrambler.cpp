@@ -55,7 +55,7 @@ Return<Result> Descrambler::setDemuxSource(uint32_t demuxId) {
     mSourceDemuxId = demuxId;
     mTunerService->attachDescramblerToDemux(mDescramblerId, demuxId);
 
-    int mLocalMode = property_get_int32(TF_DEBUG_ENABLE_LOCAL_PLAY, 1);
+    int mLocalMode = property_get_int32(TF_DEBUG_ENABLE_LOCAL_PLAY, 0);
     if (Secure_SetTSNSource(TSN_PATH, mLocalMode == 0 ? TSN_DVB : TSN_IPTV) != 0) {
         ALOGE("%s/%d Secure_SetTSNSource failed!", __FUNCTION__, __LINE__);
         return Result::INVALID_STATE;
