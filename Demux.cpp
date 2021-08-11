@@ -152,6 +152,8 @@ void Demux::postData(void* demux, int fid, bool esOutput, bool passthrough) {
             while (readRet) {
                 readRet = dmxDev->getAmDmxDevice()
                       ->AM_DMX_Read(fid, tmpData.data()/* + headerLen*/, (int*)(&readLen));
+                if (readRet)
+                    continue;
                 totalLen += readLen;
                 if (totalLen < dataLen) {
                     ALOGD("totalLen= %d, dataLen = %d", totalLen, dataLen);
@@ -159,7 +161,6 @@ void Demux::postData(void* demux, int fid, bool esOutput, bool passthrough) {
                     readRet = 1;
                     continue;
                 }
-
 #ifdef TUNERHAL_DBG
                 mFilterOutputTotalLen += dataLen;
                 mDropLen += dataLen;

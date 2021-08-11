@@ -223,8 +223,6 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     public static String mCustomerData = null;
     public static String mContentType = null;
 
-    private static final int MAX_TEST_DURATION_MS = 10 * 60 * 1000;
-
     private Looper mLooper;
     private MediaCas mMediaCas = null;
     private MediaCas.EventListener mListener = null;
@@ -248,7 +246,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private PmtInfo mPmtInfo = null;
     private PatInfo mPatInfo = null;
 
-    private int mDscChannelNum = 0;
+    private int mEcmPidNum = 0;
     private DscChannelInfo[] mEsCasInfo = new DscChannelInfo[MAX_DSC_CHANNEL_NUM];
     private byte[] mCasKeyToken = null;
     private int mCasKeyTokenIdx = 0;
@@ -291,7 +289,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private boolean mIsCasPlayback = false;
     private String mVideoMimeType = MediaCodecPlayer.TEST_MIME_TYPE;
     private String mAudioMimeType = MediaCodecPlayer.AUDIO_MIME_TYPE;
-    private boolean mPassthroughMode = false;
+    private boolean mPassthroughMode = true;
     private boolean mUseCodec2 = false;
     private int mAvSyncHwId = 0;
     private int mAvSyncIdPassthroughFlag = 1 << 16;
@@ -307,7 +305,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     private boolean mDebugTsSection = false;
     private boolean mSupportMediaCas = true;
     private boolean mDumpVideoEs = false;
-    private boolean mEnableLocalPlay = true;
+    private boolean mEnableLocalPlay = false;
     private boolean mEnableDvr = false;
 
     private String mScanMode = "Dvbt";
@@ -340,8 +338,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         initView();
         initListener();
         initHandler();
-        Log.d(TAG, "New tuner executor and tuner");
-
+        Log.d(TAG, "New tuner executor");
         mExecutor = new TunerExecutor();
 
         String mEnablePassthrough = getPropString("getprop " + TF_PROP_ENABLE_PASSTHROUGH);
@@ -374,7 +371,6 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         Log.d(TAG, "mDvrHighThreshold: " + mDvrHighThreshold);
         mDvrLowThreshold = mDvrMQSize_MB * 1024 * 1024 * 2 / 10;
         mDvrHighThreshold = mDvrMQSize_MB * 1024 * 1024 * 8 / 10;
-        Log.d(TAG, "Get [mDvrPlayback & mDvrRecorder] with [mTuner & mExecutor], and config with DvrSettings");
 
         String enableDvr = getPropString("getprop " + TF_PROP_ENABLE_DVR);
         if (enableDvr != null && enableDvr.length() > 0)
@@ -1613,8 +1609,8 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
                 mCasKeyToken[mCasKeyTokenIdx ++] = (byte) (mCasCurSessionId >> 8 & 0xff);
                 mCasKeyToken[mCasKeyTokenIdx ++] = (byte) (mCasCurSessionId >> 16 & 0xff);
                 mCasKeyToken[mCasKeyTokenIdx ++] = (byte) (mCasCurSessionId >> 24 & 0xff);
-                mCasKeyToken[mCasKeyTokenIdx ++] = (byte) (mDscChannelNum & 0xff);
-                Log.d(TAG, "mCasCurSessionId:" + mCasCurSessionId + " mDscChannelNum:" + mDscChannelNum);
+                mCasKeyToken[mCasKeyTokenIdx ++] = (byte) (mEcmPidNum & 0xff);
+                Log.d(TAG, "mCasCurSessionId:" + mCasCurSessionId + " mEcmPidNum:" + mEcmPidNum);
             }
 
             if (mEsCasInfo[mCasIdx].mGetCryptoMode == false) {
@@ -1627,12 +1623,12 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
 
                 mCasKeyToken[mCasKeyTokenIdx] = (byte) (mCryptoMode & 0xff);
                 mCasKeyTokenIdx += 1;
-                if (mDscChannelNum == mCasKeyTokenIdx - Integer.SIZE / 8 - 1) {
+                if (mEcmPidNum == mCasKeyTokenIdx - Integer.SIZE / 8 - 1) {
                     Log.d(TAG, "mDescrambler ready to setKeyToken.");
                     mDescrambler.setKeyToken(mCasKeyToken);
                     mHasSetKeyToken.set(true);
                 } else {
-                    Log.d(TAG, "mDescrambler wait to setKeyToken. mDscChannelNum: " + mDscChannelNum);
+                    Log.d(TAG, "mDescrambler wait to setKeyToken. mEcmPidNum: " + mEcmPidNum);
                     return;
                 }
             }
@@ -1920,11 +1916,11 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
           }
         if (mEsCasInfo[VIDEO_CHANNEL_INDEX] != null) {
             if (mEsCasInfo[VIDEO_CHANNEL_INDEX].getEcmPid() != 0x1fff)
-                mDscChannelNum += 1;
+                mEcmPidNum += 1;
         }
         if (mEsCasInfo[AUDIO_CHANNEL_INDEX] != null) {
             if (mEsCasInfo[AUDIO_CHANNEL_INDEX].getEcmPid() != 0x1fff)
-                mDscChannelNum += 1;
+                mEcmPidNum += 1;
         }
         return;
     }
@@ -1939,7 +1935,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
             mAudioFilterId = mAudioFilter.getId();
             Log.d(TAG, "mAudioFilterId:" + mAudioFilterId);
         }
-        Log.d(TAG, "mAvSyncHwId:" + mAvSyncHwId + " mVideoFilterId:" + mVideoFilterId);
+        Log.d(TAG, "mAvSyncHwId:" + mAvSyncHwId);
         if (mAudioformat != null) {
             try {
                 mAudioTrack = new AudioTrack.Builder()
@@ -2395,7 +2391,6 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         .setSettings(videoSettings)
         .build();
          filter.configure(videoConfig);
-         //filter.start();
          return filter;
     }
 
@@ -2415,7 +2410,6 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
         .setSettings(audioSettings)
         .build();
          filter.configure(audioConfig);
-         //filter.start();
          return filter;
     }
 
@@ -2488,7 +2482,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
     }
 
     public void onFrameRendered(MediaCodec codec, long presentationTimeUs, long nanoTime) {
-        if (mDecoderFreeBufPercentage.get() != presentationTimeUs) {
+        if (mDecoderFreeBufPercentage.get() != presentationTimeUs && mPassthroughMode) {
             mDecoderFreeBufPercentage.set(presentationTimeUs);
             if (presentationTimeUs < MIN_DECODER_BUFFER_FREE_THRESHOLD / 2)
                 Log.d(TAG, "onFrameRendered decoderFreeBufPercentage = " + presentationTimeUs + " nanoTime= " + nanoTime);
@@ -2621,7 +2615,6 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
 
         //Wait DemuxQueueNotifyBits::DATA_READY->readPlaybackFMQ->mDvrMQ->read->AM_DMX_WriteTs
         mDvrPlayback.start();
-        //Just set mRecordStatus to RecordStatus::DATA_READY
         mDvrPlayback.flush();
         readDataToPlay();
     }
@@ -2679,8 +2672,10 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
             }
             if (mVideoFilter != null);
                 mVideoFilter.stop();
-            if (mAudioFilter != null);
+            if (mAudioFilter != null && mPassthroughMode);
                 mAudioFilter.stop();
+            if (mPcrFilter != null);
+                mPcrFilter.stop();
             mTuner.cancelTuning();
             mTuner.close();
             mTuner = null;
@@ -2689,13 +2684,14 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
             mPmtSectionFilter = null;
             mVideoFilter = null;
             mAudioFilter = null;
+            mPcrFilter = null;
             mDvrFilter = null;
             mPatInfo = null;
             mPmtInfo = null;
             Log.d(TAG, "mTuner close");
         }
 
-        for (int mCasIdx = 0; mCasIdx < mDscChannelNum; mCasIdx ++) {
+        for (int mCasIdx = 0; mCasIdx < MAX_DSC_CHANNEL_NUM; mCasIdx ++) {
             if (mEsCasInfo[mCasIdx] != null) {
                 mEsCasInfo[mCasIdx].mGetCryptoMode = false;
                 for (int mEcmFilterIdx = 0; mEcmFilterIdx < MAX_CAS_ECM_TID_NUM; mEcmFilterIdx ++) {
@@ -2711,7 +2707,7 @@ public class SetupActivity extends Activity implements OnTuneEventListener, Scan
             if (mCasCurSession != null) {
                 mCasCurSession.close();
                 mCasCurSession = null;
-                mDscChannelNum = 0;
+                mEcmPidNum = 0;
             }
             mCasKeyTokenIdx = 0;
             mCasKeyToken = null;
