@@ -89,13 +89,12 @@ void FrontendDevice::release() {
         mDev.mHw->release(mDev.devFd, this);
         mDev.devFd = -1;
     }
-
     requestExitAndWait();
 }
 
 void FrontendDevice::stop() {
     updateThreadState(FrontendDevice::STATE_STOP);
-    mDev.tuneFreq = 0;
+    mDev.tuneFreq  = 0;
     clearTuner();
     if (mDev.mHw != nullptr)
     {
@@ -189,7 +188,7 @@ static int bandwidth_hz (enum fe_bandwidth bw) {
 }
 
 int FrontendDevice::internalTune(const FrontendSettings & settings) {
-    ALOGE("%s, id(%d)", __FUNCTION__, mDev.id);
+    ALOGD("%s, id(%d)", __FUNCTION__, mDev.id);
     dvb_frontend_parameters fe_params;
 
     FrontendSettings tuneSettings = settings;
@@ -198,9 +197,6 @@ int FrontendDevice::internalTune(const FrontendSettings & settings) {
         ALOGE("[id:%d] Wrong delivery system in FrontendSetgings, or not support it.", mDev.id);
         return INVALID_ARGUMENT;
     }
-    getFeDevice()->blindFreq = fe_params.frequency =
-        (fe_params.frequency < getFeDevice()->blindFreq)
-        ? getFeDevice()->blindFreq : fe_params.frequency;
 
     mDev.tuneFreq = fe_params.frequency;
     if (!checkOpen(true)) {
@@ -412,9 +408,7 @@ void FrontendDevice::clearTuner() {
 #if 0
     if (!checkOpen(true)) return;
 
-    struct dtv_property p =
-        {.cmd = DTV_DELIVERY_SYSTEM,
-        .u.data = SYS_ANALOG};
+    struct dtv_property p = {.cmd = DTV_CLEAR};
     struct dtv_properties props = {.num = 1, .props = &p};
 
     ioctl(mDev.devFd, FE_SET_PROPERTY, &props);
