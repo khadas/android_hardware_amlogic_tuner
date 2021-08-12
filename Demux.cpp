@@ -30,7 +30,7 @@ namespace implementation {
 #define WAIT_TIMEOUT 3000000000
 #define PSI_MAX_SIZE 4096
 
-static int mSupportLocalPlayer = 1;
+static int mSupportLocalPlayer = 0;
 
 #ifdef TUNERHAL_DBG
 #define TF_DEBUG_DROP_TS_NUM "vendor.tf.drop.tsnum"
@@ -53,7 +53,7 @@ Demux::Demux(uint32_t demuxId, sp<Tuner> tuner) {
     ALOGD("mDropLen:%d mFilterOutputTotalLen:%d mDropTsPktNum:%d mDumpEsData:%d",
         mDropLen, mFilterOutputTotalLen, mDropTsPktNum, mDumpEsData);
 #endif
-    mSupportLocalPlayer = property_get_int32(TF_DEBUG_ENABLE_LOCAL_PLAY, 1);
+    mSupportLocalPlayer = property_get_int32(TF_DEBUG_ENABLE_LOCAL_PLAY, 0);
     AmDmxDevice = new AM_DMX_Device();
     AmDmxDevice->dev_no = demuxId;
     ALOGD("mDemuxId:%d mSupportLocalPlayer:%d", mDemuxId, mSupportLocalPlayer);
